@@ -1,0 +1,49 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:api.github.com)",
+      "PowerShell(& \"D:\\\\MATLAB\\\\matlab-mcp-core-server-win64.exe\" --help 2>&1)",
+      "PowerShell(claude mcp add --transport stdio matlab \"D:\\\\MATLAB\\\\matlab-mcp-core-server-win64.exe\" -- --matlab-root \"D:\\\\MATLAB\\\\R2022a\" --initial-working-folder \"d:\\\\MATLAB\\\\MATLAB WORKSPACE\")",
+      "PowerShell(& \"D:\\\\MATLAB\\\\matlab-mcp-core-server-win64.exe\" --setup-matlab --matlab-root \"D:\\\\MATLAB\\\\R2022a\" 2>&1)",
+      "PowerShell(claude mcp add --help 2>&1)",
+      "PowerShell(claude mcp add matlab -- \"D:\\\\MATLAB\\\\matlab-mcp-core-server-win64.exe\" --matlab-root \"D:\\\\MATLAB\\\\R2022a\" --initial-working-folder \"d:\\\\MATLAB\\\\MATLAB WORKSPACE\")",
+      "PowerShell(claude mcp list 2>&1)",
+      "PowerShell(claude mcp add matlab -- \"D:\\\\MATLAB\\\\matlab-mcp-core-server-win64.exe\" --matlab-root=D:\\\\MATLAB\\\\R2022a)",
+      "PowerShell(claude mcp add matlab \"D:\\\\MATLAB\\\\matlab-mcp-core-server-win64.exe\" --matlab-root=D:\\\\MATLAB\\\\R2022a)",
+      "PowerShell(claude mcp add matlab \"D:\\\\MATLAB\\\\matlab-mcp-core-server-win64.exe\")",
+      "Read(//c/Users/Userx/**)",
+      "Read(//c/Users/邓车昊/**)",
+      "PowerShell($env:PATH = \"D:\\\\MATLAB\\\\R2022a\\\\bin;$env:PATH\"; & \"D:\\\\MATLAB\\\\matlab-mcp-core-server-win64.exe\" --version 2>&1)",
+      "PowerShell(Get-Process -Name \"MATLAB\" -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-ChildItem \"$env:USERPROFILE\\\\.claude\\\\logs\" -ErrorAction SilentlyContinue | Select-Object Name, LastWriteTime | Sort-Object LastWriteTime -Descending | Select-Object -First 10)",
+      "PowerShell(claude mcp get matlab 2>&1)",
+      "PowerShell(claude mcp --help 2>&1)",
+      "PowerShell(claude mcp remove matlab 2>&1)",
+      "PowerShell(claude mcp add --transport stdio matlab -- \"D:\\\\MATLAB\\\\matlab-mcp-core-server-win64.exe\" --matlab-root=D:\\\\MATLAB\\\\R2022a --initial-working-folder=\"d:\\\\MATLAB\\\\MATLAB WORKSPACE\" --matlab-display-mode=nodesktop --initialize-matlab-on-startup=true 2>&1)",
+      "PowerShell(claude mcp add matlab \"D:\\\\MATLAB\\\\matlab-mcp-core-server-win64.exe\" 2>&1)",
+      "PowerShell($tempFile = [System.IO.Path]::GetTempFileName\\(\\); $request = '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"detect_matlab_toolboxes\",\"arguments\":{}}}'; $utf8 = New-Object System.Text.UTF8Encoding $false; [System.IO.File]::WriteAllBytes\\($tempFile, $utf8.GetBytes\\($request\\)\\); $result = cmd /c \"type `\"$tempFile`\" 2>$null | `\"D:\\\\MATLAB\\\\matlab-mcp-core-server-win64.exe`\" --matlab-root=D:\\\\MATLAB\\\\R2022a --log-level=error 2>&1\"; Remove-Item $tempFile; Write-Output $result)",
+      "PowerShell($tempFile = [System.IO.Path]::GetTempFileName\\(\\); $request = '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"detect_matlab_toolboxes\",\"arguments\":{}}}'; $utf8 = New-Object System.Text.UTF8Encoding $false; [System.IO.File]::WriteAllBytes\\($tempFile, $utf8.GetBytes\\($request\\)\\); $batFile = [System.IO.Path]::GetTempFileName\\(\\) -replace '\\\\.tmp', '.bat'; $batContent = \"@echo off`r`n`\"D:\\\\MATLAB\\\\matlab-mcp-core-server-win64.exe`\" --matlab-root=D:\\\\MATLAB\\\\R2022a --log-level=error < `\"$tempFile`\" 2>&1\"; [System.IO.File]::WriteAllBytes\\($batFile, $utf8.GetBytes\\($batContent\\)\\); $result = cmd /c $batFile 2>&1; Remove-Item $tempFile -ErrorAction SilentlyContinue; Remove-Item $batFile -ErrorAction SilentlyContinue; Write-Output $result)",
+      "PowerShell($request = '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"detect_matlab_toolboxes\",\"arguments\":{}}}'; $utf8 = New-Object System.Text.UTF8Encoding $false; $bytes = $utf8.GetBytes\\($request\\); Write-Output \"First 10 bytes: $\\($bytes[0..9] -join ', '\\)\"; Write-Output \"Expected \\(no BOM\\): 123, 34, 106, 115, 111, 110, 114, 112, 99, 34\"; Write-Output \"Actual char: $\\([char[]]$bytes[0..9] -join ''\\)\")",
+      "PowerShell(claude --version 2>&1)",
+      "PowerShell($tempIn = \"C:\\\\Users\\\\Userx\\\\AppData\\\\Local\\\\Temp\\\\mcp_stdin.txt\"; $tempOut = \"C:\\\\Users\\\\Userx\\\\AppData\\\\Local\\\\Temp\\\\mcp_stdout.txt\"; $init = '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"claude-code\",\"version\":\"2.1.129\"}}}'; $toolsList = '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}'; $toolCall = '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"detect_matlab_toolboxes\",\"arguments\":{}}}'; $all = \"$init`n$toolsList`n$toolCall`n\"; [System.IO.File]::WriteAllText\\($tempIn, $all, \\(New-Object System.Text.UTF8Encoding $false\\)\\); Write-Output \"Input written \\(UTF-8, no BOM\\):\"; Write-Output $all)",
+      "PowerShell($tempIn = \"C:\\\\Users\\\\Userx\\\\AppData\\\\Local\\\\Temp\\\\mcp_stdin.txt\"; $tempOut = \"C:\\\\Users\\\\Userx\\\\AppData\\\\Local\\\\Temp\\\\mcp_stdout.txt\"; $tempErr = \"C:\\\\Users\\\\Userx\\\\AppData\\\\Local\\\\Temp\\\\mcp_stderr.txt\"; $p = Start-Process -FilePath \"D:\\\\MATLAB\\\\matlab-mcp-core-server-win64.exe\" -ArgumentList \"--matlab-root=D:\\\\MATLAB\\\\R2022a --log-level=debug\" -RedirectStandardInput $tempIn -RedirectStandardOutput $tempOut -RedirectStandardError $tempErr -NoNewWindow -Wait -PassThru; Write-Output \"Exit code: $\\($p.ExitCode\\)\"; Write-Output \"=== STDOUT ===\"; Get-Content $tempOut; Write-Output \"=== STDERR ===\"; Get-Content $tempErr)",
+      "PowerShell(& \"D:\\\\MATLAB\\\\R2022a\\\\bin\\\\matlab.exe\" -nodesktop -nosplash -batch \"v = ver; disp\\('=== Installed Toolboxes ==='\\); for i=1:length\\(v\\), fprintf\\('%s \\(v%s\\)\\\\n', v\\(i\\).Name, v\\(i\\).Version\\); end\" 2>&1)",
+      "PowerShell(Start-Process \"D:\\\\MATLAB\\\\R2022a\\\\bin\\\\matlab.exe\")",
+      "PowerShell(New-Item -ItemType Directory -Path \"d:\\\\MATLAB\\\\MATLAB WORKSPACE\\\\pid_demo\" -Force)",
+      "PowerShell(& \"D:\\\\MATLAB\\\\R2022a\\\\bin\\\\matlab.exe\" -nodesktop -nosplash -batch \"cd\\('d:\\\\MATLAB\\\\MATLAB WORKSPACE\\\\pid_demo'\\); run\\('run_demo.m'\\); pause\\(2\\);\" 2>&1)",
+      "PowerShell(& \"D:\\\\MATLAB\\\\R2022a\\\\bin\\\\matlab.exe\" -nodesktop -nosplash -batch \"cd\\('d:\\\\MATLAB\\\\MATLAB WORKSPACE\\\\pid_demo'\\); run\\('run_demo.m'\\); pause\\(3\\);\" 2>&1)",
+      "PowerShell(New-Item -ItemType Directory -Path \"d:\\\\MATLAB\\\\MATLAB WORKSPACE\\\\BPNN_RBFNN_Advanced\" -Force)",
+      "PowerShell(& \"D:\\\\MATLAB\\\\R2022a\\\\bin\\\\matlab.exe\" -batch \"bdclose\\('all'\\); load_system\\('simulink'\\); bp = get_param\\('simulink/Sources/Band-Limited White Noise', 'ObjectParameters'\\); fns = fieldnames\\(bp\\); for i=1:length\\(fns\\); n=fns{i}; if contains\\(lower\\(n\\),'noise'\\)||contains\\(lower\\(n\\),'cov'\\)||contains\\(lower\\(n\\),'power'\\); fprintf\\('%s\\\\n',n\\); end; end; bdclose\\('all'\\);\" 2>&1)",
+      "PowerShell(& \"D:\\\\MATLAB\\\\R2022a\\\\bin\\\\matlab.exe\" -batch \"bdclose\\('all'\\); load_system\\('simulink'\\); bp = get_param\\('simulink/Sources/Band-Limited White Noise', 'ObjectParameters'\\); fns = fieldnames\\(bp\\); for i=1:length\\(fns\\); fprintf\\('%s  [type=%s]\\\\n', fns{i}, bp.\\(fns{i}\\).Type\\); end; bdclose\\('all'\\);\" 2>&1)",
+      "PowerShell(& \"D:\\\\MATLAB\\\\R2022a\\\\bin\\\\matlab.exe\" -batch \"bdclose\\('all'\\); new_system\\('_tmp'\\); add_block\\('simulink/User-Defined Functions/MATLAB Function', '_tmp/MF'\\); bp = get_param\\('_tmp/MF', 'ObjectParameters'\\); fns = fieldnames\\(bp\\); for i=1:length\\(fns\\); n=fns{i}; if contains\\(lower\\(n\\),'sample'\\)||contains\\(lower\\(n\\),'time'\\)||contains\\(lower\\(n\\),'ts'\\); fprintf\\('%s\\\\n',n\\); end; end; bdclose\\('all'\\);\" 2>&1)",
+      "PowerShell(& \"D:\\\\MATLAB\\\\R2022a\\\\bin\\\\matlab.exe\" -batch \"bdclose\\('all'\\); new_system\\('tmpxx'\\); add_block\\('simulink/User-Defined Functions/MATLAB Function', 'tmpxx/MF'\\); bp = get_param\\('tmpxx/MF', 'ObjectParameters'\\); fns = fieldnames\\(bp\\); for i=1:length\\(fns\\); n=fns{i}; if contains\\(lower\\(n\\),'sample'\\)||contains\\(lower\\(n\\),'ts'\\); fprintf\\('%s\\\\n',n\\); end; end; bdclose\\('all'\\);\" 2>&1)"
+    ],
+    "additionalDirectories": [
+      "d:\\MATLAB\\MATLAB WORKSPACE",
+      "C:\\Users\\Userx",
+      "C:\\Users\\邓车昊"
+    ]
+  }
+}

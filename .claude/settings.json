@@ -1,0 +1,9 @@
+{
+  "enableAllProjectMcpServers": true,
+  "permissions": {
+    "allow": [
+      "PowerShell(& \"D:\\\\MATLAB\\\\R2022a\\\\bin\\\\matlab.exe\" -batch \"bdclose\\('all'\\); new_system\\('tmpxx'\\); add_block\\('simulink/User-Defined Functions/MATLAB Function', 'tmpxx/MF'\\); load_system\\('tmpxx'\\); sf=sfroot; c=sf.find\\('Path','tmpxx/MF','-isa','Stateflow.EMChart'\\); disp\\(c\\); disp\\('---Properties with Sample/Time:---'\\); ps=properties\\(c\\); for i=1:length\\(ps\\); if contains\\(lower\\(ps{i}\\),'sample'\\); fprintf\\('  %s\\\\n',ps{i}\\); end; end; bdclose\\('all'\\);\" 2>&1)",
+      "PowerShell(Expand-Archive -Path \"BP_RBFNN.slx\" -DestinationPath \"$env:TEMP\\\\slx_extract\" -Force)"
+    ]
+  }
+}

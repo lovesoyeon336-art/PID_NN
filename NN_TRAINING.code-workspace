@@ -1,0 +1,47 @@
+{
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "BPNN_mclaude": true,
+      "BPNN_RBFNN_Advanced": true,
+      "discrete": true,
+      "filter_and_pidjifenfenli": true,
+      "I_dis": true,
+      "LTI": true,
+      "LTV": true,
+      "New bpnn": true,
+      "observerofslowd": true,
+      "pid_demo": true,
+      "PID_pa": true,
+      "RBFNN": true,
+      "single_neuron PID": true,
+      "slprj": true,
+      "smith": true,
+      "traditional_pid": true,
+      "NN_TRAINING": true
+    },
+    "search.exclude": {
+      "BPNN_mclaude": true,
+      "BPNN_RBFNN_Advanced": true,
+      "discrete": true,
+      "filter_and_pidjifenfenli": true,
+      "I_dis": true,
+      "LTI": true,
+      "LTV": true,
+      "New bpnn": true,
+      "observerofslowd": true,
+      "pid_demo": true,
+      "PID_pa": true,
+      "RBFNN": true,
+      "single_neuron PID": true,
+      "slprj": true,
+      "smith": true,
+      "traditional_pid": true,
+      "NN_TRAINING": true
+    }
+  }
+}

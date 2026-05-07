@@ -1,0 +1,23 @@
+# Simulink build artifacts
+slprj/
+_sfjprj/
+_jitprj/
+
+# Simulink cache
+*.slxc
+s*.l
+s*.mat
+
+# MATLAB auto-save backups
+*.asv
+
+# Code generation artifacts
+EMLReport/
+precompile/
+
+# MATLAB preferences
+.mattoolprj
+
+# OS files
+Thumbs.db
+Desktop.ini
