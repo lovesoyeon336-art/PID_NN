@@ -48,19 +48,21 @@ persistent e_1 e_2      % e(k-1), e(k-2)：计算增量式PID所需历史误差
 persistent u_1          % u(k-1)：上一时刻控制量
 persistent Oh           % 隐含层输出（供反向传播复用）
 persistent Oo           % 输出层输出（供反向传播复用）
+persistent ei_acc       % 误差积分累加器（真积分）
+persistent y_1 u_2       % y(k-1) 和 u(k-2)，用于 Jacobian 有限差分估算
 
 %% ---------- 超参数（可根据对象特性修改）----------
 n_in  = 3;   % 输入层神经元数
 n_h   = 5;   % 隐含层神经元数（增加可提升拟合能力，但计算量增大）
 n_out = 3;   % 输出层神经元数（固定为3，对应 Kp/Ki/Kd）
 
-lr    = 0.15;   % 学习率 η（Learning Rate）
+lr    = 0.05;   % 学习率 η（Learning Rate）
 alpha = 0.05;   % 动量系数 α（Momentum，防止陷入局部极值）
 
-% PID 参数取值范围（根据实际对象整定，必须 >= 0）
-Kp_min = 0.0;  Kp_max = 2.0;
-Ki_min = 0.0;  Ki_max = 1.0;
-Kd_min = 0.0;  Kd_max = 1.0;
+% PID 参数取值范围
+Kp_min = 0.0;  Kp_max = 15.0;
+Ki_min = 0.0;  Ki_max =  5.0;
+Kd_min = 0.0;  Kd_max =  5.0;
 
 % 控制量限幅（防止执行器饱和）
 u_max =  10.0;
@@ -68,35 +70,33 @@ u_min = -10.0;
 
 %% ---------- 首次调用：初始化权值和状态 ----------
 if isempty(w_ih)
-    % 使用固定种子保证可重复性；如需随机初始化可删除 rng(1)
+    % 权值初始化（使用固定种子保证可重复性）
     rng(1);
-    % 含偏置项：输入层 (n_in+1) → 隐含层 (n_h)
     w_ih  = 0.5 * (2 * rand(n_h,  n_in + 1) - 1);
     dw_ih = zeros(n_h,  n_in + 1);
-    % 含偏置项：隐含层 (n_h+1) → 输出层 (n_out)
     w_ho  = 0.5 * (2 * rand(n_out, n_h  + 1) - 1);
     dw_ho = zeros(n_out, n_h  + 1);
-
+    % 状态变量每轮仿真重置
     e_1 = 0;   e_2 = 0;
     u_1 = 0;
-    Oh  = zeros(n_h,   1);
-    Oo  = 0.5 * ones(n_out, 1);   % 初始输出取中值
+    Oh     = zeros(n_h,   1);
+    Oo     = 0.5 * ones(n_out, 1);
+    ei_acc = 0;
+    y_1 = 0;  u_2 = 0;
 end
 
 %% ---------- Step 1：计算当前误差 ----------
-e = r - y;                     % 跟踪误差 e(k)
-ec = (e - e_1) / ts;           % 误差变化率（近似微分，单位：/s）
-ei =  e_1 + e * ts;            % 误差累积（近似积分，防止 persistent ei 累计初值问题）
-% 注：如需真积分累计，可改为 persistent ei; ei = ei + e*ts;
-%     但需注意积分饱和，此处采用单步梯形近似避免饱和问题
+e  = r - y;                    % 跟踪误差 e(k)
+ec = e - e_1;                  % 误差变化量（原始差分，与PID公式一致）
 
-% 输入向量归一化（有助于网络训练稳定性；如对象信号幅值差异大可调整 scale）
-scale_e  = 1.0;
-scale_ec = 1.0;
-scale_ei = 1.0;
-Xi = [e  / scale_e;
-      ec / scale_ec;
-      ei / scale_ei];
+% 真积分累加 + 抗饱和：仅在 u 未饱和且误差方向不加剧饱和时累加
+if ~((u_1 >= u_max && e > 0) || (u_1 <= u_min && e < 0))
+    ei_acc = ei_acc + e * ts;
+end
+ei_acc = max(-3.0, min(3.0, ei_acc));
+ei = ei_acc;
+
+Xi = [e; ec; ei];              % 3×1，三输入同量级
 
 %% ---------- Step 2：前向传播 ----------
 % 隐含层（tanh 激活，输出范围 (-1, 1)）
@@ -130,10 +130,12 @@ u = max(u_min, min(u_max, u));
 %   ∂J/∂w_ho = ∂J/∂u * ∂u/∂K * ∂K/∂Oo * ∂Oo/∂net_o * [Oh;1]'
 %   ∂J/∂w_ih = ∂J/∂w_ho 逐层回传
 %
-% ∂J/∂u 依赖对象雅可比 ∂y/∂u，此处用符号近似（方向已知时可替换）：
-%   dJ_du = -e（负号因为 ∂J/∂e = e, ∂e/∂y = -1，再近似 ∂y/∂u > 0）
-%
-dJ_du = -e;   % 若对象增益为负，改为 +e 或乘以 sign(delta_u) 判断
+% ∂J/∂u：有限差分估算被控对象 Jacobian
+%   ∂y/∂u ≈ (y(k)-y(k-1)) / (u(k-1)-u(k-2))   ← 离散差分
+%   dJ/du = ∂J/∂y · ∂y/∂u = -e · dydu
+dy_raw = (y - y_1) / (u_1 - u_2 + 1e-6);
+dydu   = max(-1.0, min(1.0, dy_raw));   % 限幅，防除零异常
+dJ_du  = -e * dydu;
 
 % 各 K 对控制量的偏导（增量式 PID）
 dU_dKp = e - e_1;
@@ -163,6 +165,10 @@ dw_ho      = new_dw_ho;
 d_tanh     = 1 - Oh.^2;               % tanh 导数
 delta_h    = (w_ho(:, 1:n_h)' * delta_o) .* d_tanh;  % [n_h × 1]
 
+% 梯度裁剪（防止梯度爆炸）
+delta_o = max(-1.0, min(1.0, delta_o));
+delta_h = max(-1.0, min(1.0, delta_h));
+
 % 输入层→隐含层权值更新（含动量项）
 grad_w_ih  = delta_h * [Xi; 1]';      % [n_h × (n_in+1)]
 new_dw_ih  = -lr * grad_w_ih + alpha * dw_ih;
@@ -172,6 +178,8 @@ dw_ih      = new_dw_ih;
 %% ---------- Step 6：状态更新 ----------
 e_2 = e_1;
 e_1 = e;
+y_1 = y;
+u_2 = u_1;
 u_1 = u;
 
 end   % function bp_pid_controller
