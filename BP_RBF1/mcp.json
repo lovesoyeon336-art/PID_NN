@@ -1,0 +1,14 @@
+{
+  "servers": {
+    "matlab": {
+      "type": "stdio",
+      "command": "D:\\MATLAB\\matlab-mcp-core-server-win64.exe",
+      "args": [
+        "--matlab-root=D:\\MATLAB\\R2022a",
+        "--initial-working-folder=d:\\MATLAB\\MATLAB WORKSPACE",
+        "--matlab-display-mode=nodesktop",
+        "--initialize-matlab-on-startup=true"
+      ]
+    }
+  }
+}
