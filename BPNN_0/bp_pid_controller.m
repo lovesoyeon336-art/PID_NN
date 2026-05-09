@@ -50,14 +50,18 @@ persistent Oh           % 隐含层输出（供反向传播复用）
 persistent Oo           % 输出层输出（供反向传播复用）
 persistent ei_acc       % 误差积分累加器（真积分）
 persistent y_1 u_2       % y(k-1) 和 u(k-2)，用于 Jacobian 有限差分估算
+persistent step_count     % 步数计数器，学习率衰减用
+persistent u_smooth       % 控制量指数平滑值
 
 %% ---------- 超参数（可根据对象特性修改）----------
 n_in  = 3;   % 输入层神经元数
 n_h   = 5;   % 隐含层神经元数（增加可提升拟合能力，但计算量增大）
 n_out = 3;   % 输出层神经元数（固定为3，对应 Kp/Ki/Kd）
 
-lr    = 0.05;   % 学习率 η（Learning Rate）
-alpha = 0.05;   % 动量系数 α（Momentum，防止陷入局部极值）
+lr0      = 0.01;    % 初始学习率（论文推荐）
+lr_decay = 0.0005;  % 指数衰减速率: lr = lr0 * exp(-step*ts*lr_decay)
+alpha = 0.05;   % 动量系数 α
+smooth_factor = 0.3;  % 控制量指数平滑因子 (0~1，越小越平滑)
 
 % PID 参数取值范围
 Kp_min = 0.0;  Kp_max = 15.0;
@@ -72,9 +76,10 @@ u_min = -10.0;
 if isempty(w_ih)
     % 权值初始化（使用固定种子保证可重复性）
     rng(1);
-    w_ih  = 0.5 * (2 * rand(n_h,  n_in + 1) - 1);
+    % Xavier 初始化：N(0, sqrt(2/(fan_in+fan_out)))
+    w_ih  = sqrt(2/(n_in + n_h)) * randn(n_h, n_in + 1);
     dw_ih = zeros(n_h,  n_in + 1);
-    w_ho  = 0.5 * (2 * rand(n_out, n_h  + 1) - 1);
+    w_ho  = sqrt(2/(n_h + n_out)) * randn(n_out, n_h + 1);
     dw_ho = zeros(n_out, n_h  + 1);
     % 状态变量每轮仿真重置
     e_1 = 0;   e_2 = 0;
@@ -83,7 +88,12 @@ if isempty(w_ih)
     Oo     = 0.5 * ones(n_out, 1);
     ei_acc = 0;
     y_1 = 0;  u_2 = 0;
+    step_count = 0;
+    u_smooth = 0;
 end
+
+% 学习率指数衰减（方案2A）
+lr = lr0 * exp(-step_count * ts * lr_decay);
 
 %% ---------- Step 1：计算当前误差 ----------
 e  = r - y;                    % 跟踪误差 e(k)
@@ -99,9 +109,9 @@ ei = ei_acc;
 Xi = [e; ec; ei];              % 3×1，三输入同量级
 
 %% ---------- Step 2：前向传播 ----------
-% 隐含层（tanh 激活，输出范围 (-1, 1)）
+% 隐含层（Leaky ReLU 激活，负斜率 0.01）
 net_h = w_ih * [Xi; 1];       % [n_h × 1]，+1 为偏置输入
-Oh    = tanh(net_h);           % [n_h × 1]
+Oh    = max(0.01*net_h, net_h);  % [n_h × 1]
 
 % 输出层（sigmoid 激活，输出范围 (0, 1)，保证 Kp/Ki/Kd ≥ 0）
 net_o = w_ho * [Oh; 1];       % [n_out × 1]
@@ -122,6 +132,10 @@ u = u_1 + delta_u;
 
 % 控制量限幅（硬饱和）
 u = max(u_min, min(u_max, u));
+
+% 输出指数平滑（抑制高频振荡）
+u_smooth = smooth_factor * u + (1 - smooth_factor) * u_smooth;
+u = u_smooth;
 
 %% ---------- Step 5：反向传播在线更新权值 ----------
 %
@@ -162,8 +176,8 @@ dw_ho      = new_dw_ho;
 
 % 隐含层误差信号 δ_h（[n_h × 1]）
 % 注：w_ho(:,1:n_h) 排除偏置列的反传
-d_tanh     = 1 - Oh.^2;               % tanh 导数
-delta_h    = (w_ho(:, 1:n_h)' * delta_o) .* d_tanh;  % [n_h × 1]
+d_leaky = ones(n_h, 1); d_leaky(net_h <= 0) = 0.01;  % LeakyReLU 导数
+delta_h    = (w_ho(:, 1:n_h)' * delta_o) .* d_leaky;  % [n_h × 1]
 
 % 梯度裁剪（防止梯度爆炸）
 delta_o = max(-1.0, min(1.0, delta_o));
@@ -181,5 +195,6 @@ e_1 = e;
 y_1 = y;
 u_2 = u_1;
 u_1 = u;
+step_count = step_count + 1;
 
 end   % function bp_pid_controller
