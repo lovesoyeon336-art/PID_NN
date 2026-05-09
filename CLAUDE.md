@@ -6,6 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
+### 0. Communication & File Creation Rules
+
+- **语言要求：所有回答、代码解释、注释均使用中文。**
+- **文件创建：在任何情况下，禁止未经用户明确同意就创建新文件。包括但不限于：`.m`、`.mat`、`.slx`、`.log`、`.txt`、`.png`、`.md` 等任何文件。执行任何可能落盘的操作前（如 `-logfile`、`save`、`Write`、`fprintf` 到文件、`>>` 重定向），必须先弹出 AskUserQuestion 征得同意。如需临时文件，使用系统临时目录（如 `/tmp` 或 `%TEMP%`），不得在工作目录下创建。**
+- **苏格拉底式提问：当遇到需要用户决策的问题时（包括但不限于：plan 中存在多个并列子方案、路径存在分歧、参数取值有不同选择、需求本身模糊），一律以弹出可选选项的形式（AskUserQuestion）让用户选择，不得自行做决定。在代码实现前，若 plan 中该方向下有多个子方案，必须先确认用户选择哪一个。**
+- **Plan 分两阶段：需要制定计划时，第一版只给出精简的大方向（核心目标、关键决策、总体路径），不涉及具体步骤细节。待用户讨论同意大方向后，再出包含具体步骤和验证点的详细 plan。**
+- **Plan 存档：plan 经用户同意后，询问用户是否在当前工作目录下存档。存档规则如下：**
+  - 先创建 `plan/` 文件夹
+  - 大方向 plan 以精简文件名存入 `plan/`，如 `plan/BP在线训练收敛.md`
+  - 后续基于该大方向的细节 plan，在原文件名后追加后缀，如 `plan/BP在线训练收敛_详细.md`
+  - 所有 plan 文件名必须精简
+  - 如果无法确定当前工作目录，先问用户
+
 ### 1. Think Before Coding
 
 **Don't assume. Don't hide confusion. Surface tradeoffs.**
@@ -63,105 +76,3 @@ For multi-step tasks, state a brief plan:
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
 ---
-
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
-
-## Project Overview
-
-This is a MATLAB/Simulink workspace for **adaptive neural network control systems** research, specifically BP (Back-Propagation) and RBF (Radial Basis Function) neural network self-tuning PID controllers. The workspace uses **MATLAB R2022a** with Simulink.
-
-## MATLAB MCP Server
-
-A MATLAB MCP server is configured (see `.vscode/mcp.json`):
-- Executable: `D:\MATLAB\matlab-mcp-core-server-win64.exe`
-- MATLAB root: `D:\MATLAB\R2022a`
-- Working folder: `d:\MATLAB\MATLAB WORKSPACE`
-- Mode: `nodesktop`, auto-initialize on startup
-
-Use the MCP server for programmatic MATLAB operations (running scripts, querying toolboxes, Simulink model manipulation).
-
-## Directory Architecture
-
-The project shows progressive development of neural-adaptive controllers, from basic exercises to a polished simulation framework:
-
-### Linear Control Fundamentals (early explorations)
-- `LTI/`, `LTV/` — Linear time-invariant/varying systems, basic Simulink modeling
-- `discrete/` — Discrete-time control with `plant.m`, `ctrl.m`, `plot1.m`
-- `PID_pa/` — PID parameter analysis, Ziegler-Nichols tuning (`Z_N.slx`)
-- `filter_and_pidjifenfenli/` — PID with integral separation and filtering
-- `smith/` — Smith predictor for time-delay systems
-- `observerofslowd/` — State observer + PID combination
-
-### Single Neuron / Early Neural PID
-- `single_neuron PID/` — Single-neuron adaptive PID (`karina.m`, `improve.m`, `forcomparison.m`)
-- `BPNN/` — BP neural network PID as a **Simulink S-Function** (`BPNN.m`). Uses 3-5-3 network structure. Has incomplete gradient code in `mdlOutputs`.
-- `New bpnn/` — Refactored BP PID S-Function (`bp_pid_sf.m`). Improved: self-managed persistent state, algebraic-loop-free 2-input interface (ek, yk), Jacobian estimation via sign(Δy/Δu) filtering.
-
-### RBF Neural Network PID
-- `RBFNN/` — RBF neural network PID (`RBF_PID.m`). Combined identifier + controller in one MATLAB Function block. RBF identifies Jacobian ∂y/∂u online; PID gains updated via gradient descent.
-- `BPNN_mclaude/` — BP PID in MATLAB Function block form (`bp_pid_controller.m`).
-
-### Combined BP+RBF Architecture (most advanced)
-- `BPNN_RBFNN/` — Two-block architecture: `BP_PID_Controller.m` (BP NN tunes PID gains) + `RBF_Identifier_claude.m` (RBF NN provides Jacobian ∂y/∂u estimate). Simulink model at `BP_RBFNN.slx`.
-- `BPNN_RBFNN_Advanced/` — **Current canonical implementation.** Refined version with:
-  - `build_model.m` — Programmatically constructs the complete Simulink model from scratch (blocks, MATLAB Function embedding, layout, wiring, save).
-  - `BP_PID_Controller.m` — BP network: 3-6-3 structure, He initialization, tanh hidden / sigmoid output, gradient clipping, momentum, incremental PID.
-  - `RBF_Identifier.m` — RBF network: 4-10-1 structure, 4-input vector [y(k-1), y(k-2), u(k-1), u(k-2)], centers/widths/weights all online-updated with momentum.
-  - `run_tests.m` — Automated 5-scenario test suite (step response, disturbance rejection, noise robustness, sine tracking, parameter perturbation) with performance metrics and 4-figure output.
-
-### Demo
-- `pid_demo/` — DC motor PID control demo (`dc_motor_pid_ctrl.slx`). Separate from the neural control research.
-
-## Common Workflow
-
-**Building and simulating the canonical BP+RBF model:**
-```matlab
-cd('d:\MATLAB\MATLAB WORKSPACE\BPNN_RBFNN_Advanced')
-build_model          % Creates BP_RBFNN_Sim.slx programmatically
-run_tests            % Runs all 5 test scenarios, generates figures
-```
-
-**Batch execution from command line:**
-```powershell
-& "D:\MATLAB\R2022a\bin\matlab.exe" -batch "cd('BPNN_RBFNN_Advanced'); build_model; run_tests"
-```
-
-## Key Technical Conventions
-
-- **Solver:** Fixed-step `ode4` (Runge-Kutta), step size `0.001` throughout all models
-- **Plant model:** Hammerstein structure — static dead zone nonlinearity (`Dead Zone` block, ±0.3) followed by linear transfer function (default: `10/(s²+2s+5)`)
-- **Control signal limits:** ±10
-- **Sample time:** All MATLAB Function blocks set as atomic units with `Ts=0.001`
-- **State persistence:** MATLAB Function blocks use `persistent` variables for network weights, error history, and delay registers — NOT Simulink discrete states
-- **Fixed random seeds:** `rng(42)` or `rng(0)` for reproducible initialization
-- **Jacobian floor:** Minimum `abs(dy_du) >= 1e-4` to prevent gradient vanishing
-- **To Workspace:** Timeseries format used for post-simulation analysis
-
-## Model Architecture (BPNN_RBFNN_Advanced)
-
-```
-Ref (Step/Sine) → Manual Switch → BP PID → Saturation → Dist Sum → Dead Zone → Plant → Noise Sum → y_meas
-                    ↓                                                                        ↑
-                    r → BP PID(in1)                                                          |
-                    y_meas → BP PID(in2) ←──────────────────────────────────────────────────┘
-                                       ↑
-                    RBF Ident(out1: dy_du) → BP PID(in3)
-                    RBF Ident(in1: u(k-1) from Delay)
-                    RBF Ident(in2: y_meas)
-```
-
-BP and RBF blocks are independent MATLAB Function blocks connected through signal lines. The RBF estimates ∂y/∂u which the BP controller uses in its gradient descent chain rule.
-
-## File Patterns
-
-- `.slx` — Simulink models (binary ZIP format)
-- `.m` — MATLAB scripts/functions (two types: standalone scripts and MATLAB Function block code meant for embedding)
-- `.mat` — MATLAB data files
-- `.slxc` / `slprj/` / `_sfprj/` / `_jitprj/` — Simulink cache/build artifacts (do not edit)
-- `*.asv` — MATLAB editor auto-save backups
-- `s*.l` / `s*.mat` — Simulink JIT accelerator cache files in the root (auto-generated, can be deleted)
-- `EMLReport/`, `precompile/` — Simulink code generation artifacts
-
-## Subdirectory .claude/ Configurations
-
-Some subdirectories have their own `.claude/` settings (e.g., `BPNN_RBFNN/.claude/`). The root `.claude/` contains the canonical permissions and MCP configuration. When working in a specific subdirectory, root-level `.claude/` settings apply unless overridden.
