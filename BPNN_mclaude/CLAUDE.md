@@ -23,57 +23,14 @@ The working directory is `BPNN_mclaude/`, containing:
 
 ## Common Workflow
 
-**重要：每次仿真必须在单个 MATLAB 会话中完成全部操作（更新代码 → 同步模型 → 仿真 → 分析 → 绘图），不要反复开关 MATLAB。**
-
 ```matlab
-% === 标准工作流程（单次会话）===
-cd('BPNN_mclaude');
+% Run simulation
+open_system('BPNN_mclaude/bpnn_claude.slx')
+sim('BPNN_mclaude/bpnn_claude.slx')
 
-% 1. 打开模型并同步最新代码到 Simulink 内部的 MATLAB Function block
-open_system('bpnn_claude');
-rt = sfroot;
-chart = rt.find('-isa', 'Stateflow.EMChart', 'Path', 'bpnn_claude/MATLAB Function');
-chart.Script = fileread('bp_pid_controller.m');
-save_system('bpnn_claude');
-
-% 2. 仿真（快速迭代建议 200-500s，完整验证用更长时间）
-out = sim('bpnn_claude', 'StopTime', '500');
-
-% 3. 提取数据（To Workspace 输出为普通 double 数组，非 timeseries）
-t = out.tout;   r = out.r;   y = out.y;   u = out.u;
-% PID 参数: out.p (Kp), out.i (Ki), out.d (Kd)
-
-% 4. 自动分析指标
-err_rms = rms(r-y);
-ess = mean(abs(r(round(0.8*end):end) - y(round(0.8*end):end)));
-sat_rate = sum(abs(u) > 9.9) / length(u) * 100;
-fprintf('RMS误差: %.4f, 稳态MAE: %.4f, u饱和率: %.1f%%\n', err_rms, ess, sat_rate);
-
-% 5. 绘图并保存到 figures/
-figure('visible','off'); plot(t,r,t,y); legend('r','y'); grid on;
-saveas(gcf, 'figures/fig3_tracking.png');
-figure('visible','off'); plot(t,u); xlabel('t'); ylabel('u'); grid on;
-saveas(gcf, 'figures/fig2_control_u.png');
-figure('visible','off'); plot(t,out.p,t,out.i,t,out.d); legend('Kp','Ki','Kd'); grid on;
-saveas(gcf, 'figures/fig1_pid_params.png');
-
-% 6. 关闭模型
-bdclose('all');
+% Access results from workspace
+% Block outputs: u (control signal), Kp, Ki, Kd (PID gains)
 ```
-
-## Algorithm Improvement Rules
-
-修改 `bp_pid_controller.m` 时必须遵守以下规则：
-
-1. **一次只改一处。** 每次迭代只做一个算法修改，不要同时改多个。
-
-2. **每次修改后必须仿真并绘图。** 在单个 MATLAB 会话中完成：同步代码 → 保存模型 → 仿真 → 分析指标 → 生成图表。
-
-3. **Simulink 缓存机制：** 编辑 `.m` 文件本身不会自动更新 Simulink 模型内部缓存的代码。必须通过 `chart.Script = fileread(...)` 显式同步后保存。
-
-4. **自动分析指标：** 每次仿真后立即提取数值指标（RMS 误差、稳态 MAE、u 饱和率、超调量），与上一次仿真结果对比，判断改进方向是否正确。
-
-5. **仿真时长策略：** 快速迭代用 200-500s，最终验证用 7000s。每次仿真覆盖上一次的 `simulation_output.mat` 和 `figures/`。
 
 ## Model Architecture (BPNN_mclaude)
 
