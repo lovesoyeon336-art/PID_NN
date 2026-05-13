@@ -34,8 +34,8 @@ r_target = 1;           % 阶跃目标
 y_1 = 0;                % 被控对象初始输出
 u_1 = 0;                % 上一步控制量
 
-error_1 = 0;            % e(k-1)，供微分项使用
-ei = 0;                 % 积分累加器
+error_1 = 0;            % e(k-1)
+error_2 = 0;            % e(k-2)，增量式 PID 用
 
 %% ==================== 预分配 ====================
 time = zeros(1, N);
@@ -76,11 +76,14 @@ for k = 1:N
     kd(k) = Kd_max * O3(3);
     Kpid = [kp(k), ki(k), kd(k)];              % 1×3
 
-    % ---- ③ 位置式 PID ----
-    ei = ei + error(k);                         % 真积分累加
-    ei = max(-3, min(3, ei));                   % 抗饱和限幅
-    e_pid = [error(k); ei; error(k) - error_1];
-    u(k) = Kpid * e_pid;                        % 控制量 (标量)
+    % ---- ③ 增量式 PID ----
+    e_pid = [error(k) - error_1;                % Δe  (P项)
+             error(k);                          % e   (I项)
+             error(k) - 2*error_1 + error_2];   % Δ²e (D项)
+    delta_u = Kpid * e_pid;                     % 原始增量
+    du_max = 0.5;                               % 单步限幅
+    delta_u = max(-du_max, min(du_max, delta_u));
+    u(k) = u_1 + delta_u;                       % u(k) = u(k-1) + Δu
 
     % ---- ④ 非线性时变被控对象 ----
     a_k = 1.2 * (1 - 0.8 * exp(-0.1 * k));
@@ -137,6 +140,7 @@ for k = 1:N
     w2_2 = w2_1;  w2_1 = w2;
     w1_2 = w1_1;  w1_1 = w1;
 
+    error_2 = error_1;
     error_1 = error(k);
 end
 

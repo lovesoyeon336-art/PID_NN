@@ -21,7 +21,7 @@ for ep = 1:epochs
 
     % ---- 重置 plant 状态 ----
     y_1 = 0;  u_1 = 0;
-    error_1 = 0;  ei = 0;
+    error_1 = 0;  error_2 = 0;
 
     % ---- 动量缓存 ----
     w1_1 = w1;  w1_2 = w1;
@@ -56,10 +56,13 @@ for ep = 1:epochs
         Kpid = [kp_arr(k), ki_arr(k), kd_arr(k)];
 
         % PID
-        ei = ei + error(k);
-        ei = max(-3, min(3, ei));
-        e_pid = [error(k); ei; error(k) - error_1];
-        u(k) = Kpid * e_pid;
+        e_pid = [error(k) - error_1;
+                 error(k);
+                 error(k) - 2*error_1 + error_2];
+        delta_u = Kpid * e_pid;
+        du_max = 0.5;
+        delta_u = max(-du_max, min(du_max, delta_u));
+        u(k) = u_1 + delta_u;
 
         % 被控对象
         a_k = 1.2 * (1 - 0.8 * exp(-0.1 * k));
@@ -97,6 +100,7 @@ for ep = 1:epochs
         y_1 = y(k);
         w2_2 = w2_1;  w2_1 = w2;
         w1_2 = w1_1;  w1_1 = w1;
+        error_2 = error_1;
         error_1 = error(k);
     end
 

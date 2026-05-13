@@ -1,3 +1,3 @@
 function g = sigmoidGradient(z)
-g = sigmoid(z) .* (1 - sigmoid(z));
+g = z .* (1 - z);
 end
