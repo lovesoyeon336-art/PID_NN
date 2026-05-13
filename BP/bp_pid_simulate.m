@@ -2,7 +2,7 @@ clear; close all;
 
 %% ==================== 超参数 ====================
 IN = 4;   H = 5;   Out = 3;   % 输入/隐藏/输出 节点数
-rate  = 0.001;                  % 学习率
+rate  = 0.005;                  % 学习率
 rate2 = 0.01;                   % 动量系数
 N = 35000;                      % 仿真步数
 
@@ -68,7 +68,11 @@ for k = 1:N
     I3 = w2 * O2';                             % 输出层输入 (3×1)
     O3 = zeros(1, Out);
     for l = 1:Out
-        O3(l) = sigmoid(I3(l));                % 输出层输出
+        if I3(l) > 0
+            O3(l) = I3(l);                     % Leaky ReLU 正区
+        else
+            O3(l) = 0.2 * I3(l);              % Leaky ReLU 负区（允许归零）
+        end
     end
 
     kp(k) = Kp_max * O3(1);
@@ -96,7 +100,11 @@ for k = 1:N
     % 输出层灵敏度
     dO3 = zeros(1, Out);
     for j = 1:Out
-        dO3(j) = sigmoidGradient(O3(j));        % sigmoid 导数
+        if O3(j) > 0
+            dO3(j) = 1;                         % Leaky ReLU→1
+        else
+            dO3(j) = 0.2;                      % Leaky ReLU→0.2（永不消失）
+        end
     end
 
     % Jacobian 幅值近似（clamp 防梯度爆炸）

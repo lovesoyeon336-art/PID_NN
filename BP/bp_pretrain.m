@@ -2,7 +2,7 @@ clear; close all;
 
 %% ==================== 超参数 ====================
 IN = 4;   H = 5;   Out = 3;
-rate  = 0.001;
+rate  = 0.005;
 rate2 = 0.01;
 N_pretrain = 1000;              % 预训练步数
 epochs = 3;                     % 训练轮数
@@ -48,7 +48,15 @@ for ep = 1:epochs
         O2 = tanh(I2);
 
         I3 = w2 * O2';
-        O3 = sigmoid(I3');
+        I3_t = I3';
+        O3 = zeros(1, Out);
+        for l = 1:Out
+            if I3_t(l) > 0
+                O3(l) = I3_t(l);
+            else
+                O3(l) = 0.2 * I3_t(l);
+            end
+        end
 
         kp_arr(k) = Kp_max * O3(1);
         ki_arr(k) = Ki_max * O3(2);
@@ -70,7 +78,14 @@ for ep = 1:epochs
         error(k) = r(k) - y(k);
 
         % 反向传播
-        dO3 = sigmoidGradient(O3);
+        dO3 = zeros(1, Out);
+        for j = 1:Out
+            if O3(j) > 0
+                dO3(j) = 1;
+            else
+                dO3(j) = 0.2;
+            end
+        end
 
         dydu = (y(k) - y_1) / (u(k) - u_1 + 0.0001);
         du_sys = max(-1, min(1, dydu));
