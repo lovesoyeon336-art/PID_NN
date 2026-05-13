@@ -1,13 +1,13 @@
 clear; close all;
 
-%% ==================== 超参数 ====================
+%% ==================== 预训练 —— 对象3（Hammerstein 非线性） ====================
 IN = 4;   H = 5;   Out = 3;
-rate  = 0.005;
+rate  = 0.003;
 rate2 = 0.01;
-N_pretrain = 1000;              % 预训练步数
-epochs = 3;                     % 训练轮数
+N_pretrain = 1000;
+epochs = 4;
 
-Kp_max = 2.0;  Ki_max = 0.5;  Kd_max = 1.0;
+Kp_max = 3.0;  Ki_max = 0.5;  Kd_max = 3.0;
 scale_vec = [Kp_max, Ki_max, Kd_max];
 r_target = 1;
 
@@ -16,26 +16,18 @@ rng(1);
 w1 = sqrt(2/(IN+H))  * randn(H, IN);
 w2 = sqrt(2/(H+Out)) * randn(Out, H);
 
-%% ==================== 多轮预训练 ====================
 for ep = 1:epochs
-
-    % ---- 重置 plant 状态 ----
-    y_1 = 0;  u_1 = 0;
+    y_1 = 0;  y_2 = 0;  u_1 = 0;
     error_1 = 0;  error_2 = 0;
 
-    % ---- 动量缓存 ----
     w1_1 = w1;  w1_2 = w1;
     w2_1 = w2;  w2_2 = w2;
 
-    % ---- 预分配 ----
     time   = zeros(1, N_pretrain);
     r      = zeros(1, N_pretrain);
     y      = zeros(1, N_pretrain);
     error  = zeros(1, N_pretrain);
     u      = zeros(1, N_pretrain);
-    kp_arr = zeros(1, N_pretrain);
-    ki_arr = zeros(1, N_pretrain);
-    kd_arr = zeros(1, N_pretrain);
 
     for k = 1:N_pretrain
         time(k) = k;
@@ -46,46 +38,28 @@ for ep = 1:epochs
         I1 = [r(k), y_1, error(k), 1];
         I2 = I1 * w1';
         O2 = tanh(I2);
-
         I3 = w2 * O2';
         I3_t = I3';
         O3 = zeros(1, Out);
         for l = 1:Out
-            if I3_t(l) > 0
-                O3(l) = I3_t(l);
-            else
-                O3(l) = 0.2 * I3_t(l);
-            end
+            if I3_t(l) > 0, O3(l) = I3_t(l); else, O3(l) = 0.2 * I3_t(l); end
         end
 
-        kp_arr(k) = Kp_max * O3(1);
-        ki_arr(k) = Ki_max * O3(2);
-        kd_arr(k) = Kd_max * O3(3);
-        Kpid = [kp_arr(k), ki_arr(k), kd_arr(k)];
+        kp_k = Kp_max * O3(1);  ki_k = Ki_max * O3(2);  kd_k = Kd_max * O3(3);
+        Kpid = [kp_k, ki_k, kd_k];
 
-        % PID
-        e_pid = [error(k) - error_1;
-                 error(k);
-                 error(k) - 2*error_1 + error_2];
+        e_pid = [error(k) - error_1; error(k); error(k) - 2*error_1 + error_2];
         delta_u = Kpid * e_pid;
-        du_max = 0.5;
-        delta_u = max(-du_max, min(du_max, delta_u));
+        delta_u = max(-0.5, min(0.5, delta_u));
         u(k) = u_1 + delta_u;
 
-        % 被控对象
-        y(k) = plant_dynamics('plant1', y_1, 0, u(k), u_1, k);
+        y(k) = plant_dynamics('plant3', y_1, y_2, u(k), u_1, k);
         error(k) = r(k) - y(k);
 
-        % 反向传播（误差死区）
-        dead_zone = 0.01;
-        if abs(error(k)) >= dead_zone
+        % 反向传播
         dO3 = zeros(1, Out);
         for j = 1:Out
-            if O3(j) > 0
-                dO3(j) = 1;
-            else
-                dO3(j) = 0.2;
-            end
+            if O3(j) > 0, dO3(j) = 1; else, dO3(j) = 0.2; end
         end
 
         dydu = (y(k) - y_1) / (u(k) - u_1 + 0.0001);
@@ -107,24 +81,18 @@ for ep = 1:epochs
         dO2 = 1 - tanh(I2).^2;
         a_back = delta3 * w2;
         delta2 = dO2 .* a_back;
-
         d_w1 = rate * delta2' * I1;
         w1 = w1_1 + d_w1 + rate2 * (w1_1 - w1_2);
-        end  % 误差死区
 
-        % 状态缓存
-        u_1 = u(k);
-        y_1 = y(k);
+        u_1 = u(k);  y_2 = y_1;  y_1 = y(k);
         w2_2 = w2_1;  w2_1 = w2;
         w1_2 = w1_1;  w1_1 = w1;
         error_2 = error_1;
         error_1 = error(k);
     end
-
     fprintf('Epoch %d/%d  MAE: %.6f\n', ep, epochs, sum(abs(error)) / N_pretrain);
 end
 
-%% ==================== 保存预训练权重 ====================
 [script_dir, ~, ~] = fileparts(mfilename('fullpath'));
-save(fullfile(script_dir, 'bp_pretrained_weights.mat'), 'w1', 'w2');
-fprintf('权重已保存至 bp_pretrained_weights.mat\n');
+save(fullfile(script_dir, 'bp_pretrained_weights_plant3.mat'), 'w1', 'w2');
+fprintf('权重已保存至 bp_pretrained_weights_plant3.mat\n');

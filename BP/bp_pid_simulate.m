@@ -89,14 +89,15 @@ for k = 1:N
     delta_u = max(-du_max, min(du_max, delta_u));
     u(k) = u_1 + delta_u;                       % u(k) = u(k-1) + Δu
 
-    % ---- ④ 非线性时变被控对象 ----
-    a_k = 1.2 * (1 - 0.8 * exp(-0.1 * k));
-    y(k) = a_k / (1 + y_1^2) * y_1 + u(k);
+    % ---- ④ 被控对象 ----
+    y(k) = plant_dynamics('plant1', y_1, 0, u(k), u_1, k);
 
     % 更新误差（用新 y 重新计算）
     error(k) = r(k) - y(k);
 
-    % ---- ⑤ 反向传播 ----
+    % ---- ⑤ 反向传播（误差死区：小误差不更新权重） ----
+    dead_zone = 0.01;
+    if abs(error(k)) >= dead_zone
     % 输出层灵敏度
     dO3 = zeros(1, Out);
     for j = 1:Out
@@ -140,6 +141,7 @@ for k = 1:N
     % 隐藏层权重梯度 + 动量更新
     d_w1 = rate * delta2' * I1;                 % 5×4
     w1 = w1_1 + d_w1 + rate2 * (w1_1 - w1_2);
+    end  % 误差死区结束
 
     % ---- ⑥ 状态缓存 ----
     u_1 = u(k);
