@@ -1,13 +1,13 @@
 clear; close all;
 
 %% ==================== 超参数 ====================
-IN = 4;   H = 5;   Out = 3;   % 输入/隐藏/输出 节点数
+IN = 5;   H = 5;   Out = 3;   % 输入/隐藏/输出 节点数
 rate  = 0.005;                  % 学习率
 rate2 = 0.01;                   % 动量系数
 N = 2000;                       % 仿真步数
 
 Kp_max = 2.0;                   % PID 参数缩放上限
-Ki_max = 0.5;
+Ki_max = 2.0;
 Kd_max = 1.0;
 scale_vec = [Kp_max, Ki_max, Kd_max];  % 链式法则用
 
@@ -20,7 +20,7 @@ if isfile(pretrain_file)
     fprintf('已加载预训练权重: %s\n', pretrain_file);
 else
     rng(1);
-    w1 = sqrt(2/(IN+H))  * randn(H, IN);    % 5×4
+    w1 = sqrt(2/(IN+H))  * randn(H, IN);    % 5×5
     w2 = sqrt(2/(H+Out)) * randn(Out, H);   % 3×5
     fprintf('Xavier 初始化（未找到预训练权重）\n');
 end
@@ -57,7 +57,7 @@ for k = 1:N
     error(k) = r(k) - y_1;
 
     % ---- ② 前向传播 ----
-    I1 = [r(k), y_1, error(k), 1];           % 输入向量 (1×4)
+    I1 = [r(k), y_1, error(k), error_1, 1];   % 输入向量 (1×5)
     I2 = I1 * w1';                             % 隐藏层输入 (1×5)
 
     O2 = zeros(1, H);
@@ -139,7 +139,7 @@ for k = 1:N
     end
 
     % 隐藏层权重梯度 + 动量更新
-    d_w1 = rate * delta2' * I1;                 % 5×4
+    d_w1 = rate * delta2' * I1;                 % 5×5
     w1 = w1_1 + d_w1 + rate2 * (w1_1 - w1_2);
     end  % 误差死区结束
 

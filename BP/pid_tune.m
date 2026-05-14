@@ -1,8 +1,8 @@
 clear; close all;
 
-%% ==================== ITAE 整定固定 PID ====================
+%% ==================== ITAE 整定固定 PID —— 对象1（一阶非线性时变） ====================
 
-N_tune = 2000;          % 整定仿真步数
+N_tune = 2000;
 r_target = 1;
 
 %% ==================== 多起点搜索 ====================
@@ -33,31 +33,30 @@ Ki_opt = exp(best_x(2));
 Kd_opt = exp(best_x(3));
 
 %% ==================== 验证最优参数 ====================
-y_1 = 0;  u_1 = 0;  ei = 0;  last_e = 0;
+y_1 = 0;  u_1 = 0;  e_1 = 0;  e_2 = 0;
 y_hist = zeros(1, N_tune);
 u_hist = zeros(1, N_tune);
 e_hist = zeros(1, N_tune);
 
 for k = 1:N_tune
     e_cur = r_target - y_1;
-    ei = ei + e_cur;
-    ei_clamped = max(-3, min(3, ei));
-    ed = e_cur - last_e;
-    u_k = Kp_opt * e_cur + Ki_opt * ei_clamped + Kd_opt * ed;
 
-    a_k = 1.2 * (1 - 0.8 * exp(-0.1 * k));
-    y_k = a_k / (1 + y_1^2) * y_1 + u_k;
+    delta_u = Kp_opt*(e_cur - e_1) + Ki_opt*e_cur + Kd_opt*(e_cur - 2*e_1 + e_2);
+    delta_u = max(-0.5, min(0.5, delta_u));
+    u_k = u_1 + delta_u;
+
+    y_k = plant_dynamics('plant1', y_1, 0, u_k, u_1, k);
 
     y_hist(k) = y_k;
     u_hist(k) = u_k;
     e_hist(k) = e_cur;
 
-    last_e = e_cur;
+    e_2 = e_1;  e_1 = e_cur;
     y_1 = y_k;
     u_1 = u_k;
 end
 
-fprintf('===== ITAE 整定结果 =====\n');
+fprintf('===== ITAE 整定结果（对象1）=====\n');
 fprintf('Kp = %.4f   Ki = %.4f   Kd = %.4f\n', Kp_opt, Ki_opt, Kd_opt);
 fprintf('ITAE = %.2f\n', best_cost);
 fprintf('MAE  = %.6f\n', sum(abs(e_hist)) / N_tune);
@@ -78,12 +77,12 @@ fprintf('\n最优参数已保存至 pid_tuned_params.mat\n');
 
 %% ==================== 绘图 ====================
 fx = [1, min(500, N_tune)];
-figure('Name', '整定后 PID 阶跃响应', 'NumberTitle', 'off');
+figure('Name', '整定后 PID 阶跃响应（对象1）', 'NumberTitle', 'off');
 plot(1:N_tune, r_target * ones(1, N_tune), 'r', 1:N_tune, y_hist, 'b--', 'LineWidth', 1.2);
 xlim(fx);
-xlabel('时间步'); ylabel('温度');
+xlabel('时间步'); ylabel('输出');
 legend('目标', '实际', 'Location', 'best');
-title(sprintf('ITAE 整定 PID (Kp=%.2f, Ki=%.2f, Kd=%.2f)', Kp_opt, Ki_opt, Kd_opt));
+title(sprintf('ITAE 整定 PID 对象1 (Kp=%.2f, Ki=%.2f, Kd=%.2f)', Kp_opt, Ki_opt, Kd_opt));
 grid on;
 
 %% ==================== 局部函数 ====================
@@ -93,23 +92,21 @@ function cost = pid_cost(x, N_sim, r_target)
     Ki = exp(x(2));
     Kd = exp(x(3));
 
-    y_1 = 0;  u_1 = 0;  ei = 0;  last_e = 0;
+    y_1 = 0;  u_1 = 0;  e_1 = 0;  e_2 = 0;
     ITAE = 0;
 
     for k = 1:N_sim
         e_cur = r_target - y_1;
-        ei = ei + e_cur;
-        ei_clamped = max(-3, min(3, ei));
-        ed = e_cur - last_e;
 
-        u_k = Kp * e_cur + Ki * ei_clamped + Kd * ed;
+        delta_u = Kp*(e_cur - e_1) + Ki*e_cur + Kd*(e_cur - 2*e_1 + e_2);
+        delta_u = max(-0.5, min(0.5, delta_u));
+        u_k = u_1 + delta_u;
 
-        a_k = 1.2 * (1 - 0.8 * exp(-0.1 * k));
-        y_k = a_k / (1 + y_1^2) * y_1 + u_k;
+        y_k = plant_dynamics('plant1', y_1, 0, u_k, u_1, k);
 
         ITAE = ITAE + k * abs(e_cur);
 
-        last_e = e_cur;
+        e_2 = e_1;  e_1 = e_cur;
         y_1 = y_k;
         u_1 = u_k;
     end

@@ -1,15 +1,14 @@
 clear; close all;
 
 %% ==================== 超参数 ====================
-IN = 4;   H = 5;   Out = 3;
+IN = 5;   H = 5;   Out = 3;
 rate  = 0.005;
 rate2 = 0.01;
 N_pretrain = 1000;              % 预训练步数
-epochs = 3;                     % 训练轮数
+epochs = 7;                     % 前4轮斜坡+第5-6轮阶跃+后1轮多样化
 
-Kp_max = 2.0;  Ki_max = 0.5;  Kd_max = 1.0;
+Kp_max = 2.0;  Ki_max = 2.0;  Kd_max = 1.0;
 scale_vec = [Kp_max, Ki_max, Kd_max];
-r_target = 1;
 
 %% ==================== Xavier 权重初始化 ====================
 rng(1);
@@ -39,11 +38,11 @@ for ep = 1:epochs
 
     for k = 1:N_pretrain
         time(k) = k;
-        r(k) = r_target;
+        r(k) = get_pretrain_r(k, N_pretrain, ep, epochs);
         error(k) = r(k) - y_1;
 
         % 前向传播
-        I1 = [r(k), y_1, error(k), 1];
+        I1 = [r(k), y_1, error(k), error_1, 1];
         I2 = I1 * w1';
         O2 = tanh(I2);
 
@@ -128,3 +127,34 @@ end
 [script_dir, ~, ~] = fileparts(mfilename('fullpath'));
 save(fullfile(script_dir, 'bp_pretrained_weights.mat'), 'w1', 'w2');
 fprintf('权重已保存至 bp_pretrained_weights.mat\n');
+
+%% ==================== 渐进式参考信号 ====================
+function r_k = get_pretrain_r(k, N_total, ep, epochs)
+    if ep <= 4                     % 前4轮：纯斜坡学积分
+        r_k = 0.5 + 1.5 * min(1, k / N_total);
+        return
+    elseif ep <= 6                 % 第5-6轮：纯阶跃学比例
+        r_k = 1;
+        return
+    end
+    phase = k / N_total;           % 第7轮：多样化泛化
+    if phase < 0.2
+        r_k = 1;
+    elseif phase < 0.4
+        r_k = 1 + 0.5 * sin(2*pi*0.01*k);
+    elseif phase < 0.6
+        persistent rand_val rand_hold
+        if isempty(rand_val) || rand_hold <= 0
+            rand_val = 0.5 + 1.5 * rand();
+            rand_hold = 80 + randi(70);
+        end
+        rand_hold = rand_hold - 1;
+        r_k = rand_val;
+    elseif phase < 0.8
+        local_k = k - round(0.6 * N_total);
+        local_N = round(0.2 * N_total);
+        r_k = 0.5 + 1.5 * min(1, local_k / max(local_N, 1));
+    else
+        r_k = 1 + 0.3 * sin(2*pi*0.03*k);
+    end
+end

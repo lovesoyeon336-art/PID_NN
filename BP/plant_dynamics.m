@@ -1,13 +1,8 @@
 function y_k = plant_dynamics(plant_id, y_1, y_2, u_k, u_1, k, a_k_override)
     % 统一被控对象模型
     % y_1: y(k-1),  y_2: y(k-2) (一阶对象传0)
-    % u_k: u(k),   u_1: u(k-1) (带死区对象传延迟后的值)
+    % u_k: u(k),   u_1: u(k-1)
     % a_k_override: 用于参数摄动等场景 (仅 plant1)
-
-    persistent plant2_last_used
-    if isempty(plant2_last_used)
-        plant2_last_used = false;
-    end
 
     switch plant_id
         case 'plant1'

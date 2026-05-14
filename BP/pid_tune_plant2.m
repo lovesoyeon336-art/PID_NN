@@ -35,17 +35,17 @@ Ki_opt = exp(best_x(2));
 Kd_opt = exp(best_x(3));
 
 %% ==================== 验证最优参数 ====================
-y_1 = 0;  y_2 = 0;  u_1 = 0;  ei = 0;  last_e = 0;
+y_1 = 0;  y_2 = 0;  u_1 = 0;  e_1 = 0;  e_2 = 0;
 y_hist = zeros(1, N_tune);
 u_hist = zeros(1, N_tune);
 e_hist = zeros(1, N_tune);
 
 for k = 1:N_tune
     e_cur = r_target - y_1;
-    ei = ei + e_cur;
-    ei_clamped = max(-5, min(5, ei));
-    ed = e_cur - last_e;
-    u_k = Kp_opt * e_cur + Ki_opt * ei_clamped + Kd_opt * ed;
+
+    delta_u = Kp_opt*(e_cur - e_1) + Ki_opt*e_cur + Kd_opt*(e_cur - 2*e_1 + e_2);
+    delta_u = max(-0.5, min(0.5, delta_u));
+    u_k = u_1 + delta_u;
 
     y_k = plant_dynamics('plant2', y_1, y_2, u_k, u_1, k);
 
@@ -53,7 +53,7 @@ for k = 1:N_tune
     u_hist(k) = u_k;
     e_hist(k) = e_cur;
 
-    last_e = e_cur;
+    e_2 = e_1;  e_1 = e_cur;
     y_2 = y_1;  y_1 = y_k;
     u_1 = u_k;
 end
@@ -94,22 +94,21 @@ function cost = pid_cost_plant2(x, N_sim, r_target)
     Ki = exp(x(2));
     Kd = exp(x(3));
 
-    y_1 = 0;  y_2 = 0;  u_1 = 0;  ei = 0;  last_e = 0;
+    y_1 = 0;  y_2 = 0;  u_1 = 0;  e_1 = 0;  e_2 = 0;
     ITAE = 0;
 
     for k = 1:N_sim
         e_cur = r_target - y_1;
-        ei = ei + e_cur;
-        ei_clamped = max(-5, min(5, ei));
-        ed = e_cur - last_e;
 
-        u_k = Kp * e_cur + Ki * ei_clamped + Kd * ed;
+        delta_u = Kp*(e_cur - e_1) + Ki*e_cur + Kd*(e_cur - 2*e_1 + e_2);
+        delta_u = max(-0.5, min(0.5, delta_u));
+        u_k = u_1 + delta_u;
 
         y_k = plant_dynamics('plant2', y_1, y_2, u_k, u_1, k);
 
         ITAE = ITAE + k * abs(e_cur);
 
-        last_e = e_cur;
+        e_2 = e_1;  e_1 = e_cur;
         y_2 = y_1;  y_1 = y_k;
         u_1 = u_k;
     end
