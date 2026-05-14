@@ -45,14 +45,14 @@ sc_defs = {
 };
 nS = size(sc_defs, 1);
 
-BP_MAE=zeros(1,nS); Fix_MAE=zeros(1,nS); SN_MAE=zeros(1,nS);
-BP_ISE=zeros(1,nS); Fix_ISE=zeros(1,nS); SN_ISE=zeros(1,nS);
-BP_ITAE=zeros(1,nS); Fix_ITAE=zeros(1,nS); SN_ITAE=zeros(1,nS);
-BP_Stl=zeros(1,nS); Fix_Stl=zeros(1,nS); SN_Stl=zeros(1,nS);
-BP_dU=zeros(1,nS);  Fix_dU=zeros(1,nS);  SN_dU=zeros(1,nS);
-BP_PeakU=zeros(1,nS); Fix_PeakU=zeros(1,nS); SN_PeakU=zeros(1,nS);
+BP_MAE=zeros(1,nS); Fix_MAE=zeros(1,nS);
+BP_ISE=zeros(1,nS); Fix_ISE=zeros(1,nS);
+BP_ITAE=zeros(1,nS); Fix_ITAE=zeros(1,nS);
+BP_Stl=zeros(1,nS); Fix_Stl=zeros(1,nS);
+BP_dU=zeros(1,nS);  Fix_dU=zeros(1,nS);
+BP_PeakU=zeros(1,nS); Fix_PeakU=zeros(1,nS);
 
-Y_bp=cell(1,nS); Y_fix=cell(1,nS); Y_sn=cell(1,nS); R_seq=cell(1,nS);
+Y_bp=cell(1,nS); Y_fix=cell(1,nS); R_seq=cell(1,nS);
 
 for i = 1:nS
     pid = sc_defs{i,1};
@@ -73,35 +73,34 @@ for i = 1:nS
 
     [y_bp, e_bp, u_bp] = sim_bp_pid(N, sc, pid, w1p, w2p);
     [y_fix, e_fix, u_fix] = sim_fix_pid(N, sc, pid, KpF, KiF, KdF);
-    [y_sn, e_sn, u_sn] = sim_sn_pid(N, sc, pid);
 
-    [BP_MAE(i),Fix_MAE(i),SN_MAE(i), BP_ISE(i),Fix_ISE(i),SN_ISE(i), ...
-     BP_ITAE(i),Fix_ITAE(i),SN_ITAE(i), ...
-     BP_Stl(i),Fix_Stl(i),SN_Stl(i), ...
-     BP_dU(i),Fix_dU(i),SN_dU(i), ...
-     BP_PeakU(i),Fix_PeakU(i),SN_PeakU(i)] = ...
-        metrics3(y_bp,e_bp,r_seq, y_fix,e_fix, y_sn,e_sn, u_bp,u_fix,u_sn);
+    [BP_MAE(i),Fix_MAE(i), BP_ISE(i),Fix_ISE(i), ...
+     BP_ITAE(i),Fix_ITAE(i), ...
+     BP_Stl(i),Fix_Stl(i), ...
+     BP_dU(i),Fix_dU(i), ...
+     BP_PeakU(i),Fix_PeakU(i)] = ...
+        metrics2(y_bp,e_bp,r_seq, y_fix,e_fix, u_bp,u_fix);
 
-    Y_bp{i}=y_bp; Y_fix{i}=y_fix; Y_sn{i}=y_sn; R_seq{i}=r_seq;
+    Y_bp{i}=y_bp; Y_fix{i}=y_fix; R_seq{i}=r_seq;
 end
 
 %% ==================== 输出对比表 ====================
 fprintf('\n========== 测试结果汇总 ==========\n');
-fprintf('%-16s | %-8s %-8s %-8s | %-8s %-8s %-8s\n', ...
-    '场景', 'BP_MAE', 'Fix_MAE', 'SN_MAE', 'BP_ISE', 'Fix_ISE', 'SN_ISE');
-fprintf('%s\n', repmat('-', 1, 100));
+fprintf('%-16s | %-8s %-8s | %-8s %-8s\n', ...
+    '场景', 'BP_MAE', 'Fix_MAE', 'BP_ISE', 'Fix_ISE');
+fprintf('%s\n', repmat('-', 1, 70));
 for i = 1:nS
-    fprintf('%-16s | %8.4f %8.4f %8.4f | %8.4f %8.4f %8.4f\n', ...
-        sc_defs{i,3}, BP_MAE(i), Fix_MAE(i), SN_MAE(i), BP_ISE(i), Fix_ISE(i), SN_ISE(i));
+    fprintf('%-16s | %8.4f %8.4f | %8.4f %8.4f\n', ...
+        sc_defs{i,3}, BP_MAE(i), Fix_MAE(i), BP_ISE(i), Fix_ISE(i));
 end
 
 fprintf('\n----- 综合 MAE -----\n');
-fprintf('BP-PID=%.4f  固定PID=%.4f  单神经元=%.4f\n', sum(BP_MAE), sum(Fix_MAE), sum(SN_MAE));
-fprintf('BP/Fix=%.2f  BP/SN=%.2f\n', sum(BP_MAE)/max(sum(Fix_MAE),1e-9), sum(BP_MAE)/max(sum(SN_MAE),1e-9));
+fprintf('BP-PID=%.4f  固定PID=%.4f\n', sum(BP_MAE), sum(Fix_MAE));
+fprintf('BP/Fix=%.2f\n', sum(BP_MAE)/max(sum(Fix_MAE),1e-9));
 fprintf('\n----- 综合 ISE -----\n');
-fprintf('BP-PID=%.4f  固定PID=%.4f  单神经元=%.4f\n', sum(BP_ISE), sum(Fix_ISE), sum(SN_ISE));
+fprintf('BP-PID=%.4f  固定PID=%.4f\n', sum(BP_ISE), sum(Fix_ISE));
 fprintf('\n----- 综合 ITAE -----\n');
-fprintf('BP-PID=%.2f  固定PID=%.2f  单神经元=%.2f\n', sum(BP_ITAE), sum(Fix_ITAE), sum(SN_ITAE));
+fprintf('BP-PID=%.2f  固定PID=%.2f\n', sum(BP_ITAE), sum(Fix_ITAE));
 
 %% ==================== 绘图 ====================
 figure('Name', 'MAE/ISE/ITAE 指标对比', 'NumberTitle', 'off');
@@ -109,16 +108,16 @@ metrics_names = {'MAE', 'ISE', 'ITAE', 'RMS(Δu)', 'Peak |u|'};
 for p = 1:5
     subplot(2,3,p);
     switch p
-        case 1, bp_d=BP_MAE; fix_d=Fix_MAE; sn_d=SN_MAE;
-        case 2, bp_d=BP_ISE; fix_d=Fix_ISE; sn_d=SN_ISE;
-        case 3, bp_d=BP_ITAE; fix_d=Fix_ITAE; sn_d=SN_ITAE;
-        case 4, bp_d=BP_dU;  fix_d=Fix_dU;  sn_d=SN_dU;
-        case 5, bp_d=BP_PeakU; fix_d=Fix_PeakU; sn_d=SN_PeakU;
+        case 1, bp_d=BP_MAE; fix_d=Fix_MAE;
+        case 2, bp_d=BP_ISE; fix_d=Fix_ISE;
+        case 3, bp_d=BP_ITAE; fix_d=Fix_ITAE;
+        case 4, bp_d=BP_dU;  fix_d=Fix_dU;
+        case 5, bp_d=BP_PeakU; fix_d=Fix_PeakU;
     end
-    bar([bp_d(:),fix_d(:),sn_d(:)]);
+    bar([bp_d(:),fix_d(:)]);
     set(gca,'XTickLabel',sc_defs(:,3));
     xtickangle(45);
-    if p==1, legend('BP-PID','固定PID','单神经元','Location','best'); end
+    if p==1, legend('BP-PID','固定PID','Location','best'); end
     title(metrics_names{p}); grid on;
 end
 
@@ -128,55 +127,52 @@ for fig=1:3
     s0=(fig-1)*6;
     for s=1:min(6,nS-s0)
         subplot(2,3,s); idx=s0+s;
-        r_plot=R_seq{idx}; yb=Y_bp{idx}; yf=Y_fix{idx}; ys=Y_sn{idx};
-        plot(1:N,r_plot,'r',1:N,yf,'k:',1:N,ys,'m-.',1:N,yb,'b--','LineWidth',0.8);
+        r_plot=R_seq{idx}; yb=Y_bp{idx}; yf=Y_fix{idx};
+        plot(1:N,r_plot,'r',1:N,yf,'k:',1:N,yb,'b--','LineWidth',0.8);
         xlim(fx); xlabel('步'); ylabel('y');
-        if s==1, legend('目标','固定PID','单神经元','BP-PID','Location','best'); end
+        if s==1, legend('目标','固定PID','BP-PID','Location','best'); end
         title(sc_defs{idx,3}); grid on;
     end
 end
 
 %% ==================== 保存 ====================
 save(fullfile(script_dir, 'test_results.mat'), ...
-    'sc_defs','N','BP_MAE','Fix_MAE','SN_MAE','BP_ISE','Fix_ISE','SN_ISE', ...
-    'BP_ITAE','Fix_ITAE','SN_ITAE','BP_Stl','Fix_Stl','SN_Stl', ...
-    'BP_dU','Fix_dU','SN_dU','BP_PeakU','Fix_PeakU','SN_PeakU');
+    'sc_defs','N','BP_MAE','Fix_MAE','BP_ISE','Fix_ISE', ...
+    'BP_ITAE','Fix_ITAE','BP_Stl','Fix_Stl', ...
+    'BP_dU','Fix_dU','BP_PeakU','Fix_PeakU');
 fprintf('\n结果已保存至 test_results.mat\n');
 
-%% ==================== 扩展指标函数（三控制器） ====================
+%% ==================== 指标函数（两控制器） ====================
 
-function [bp_mae,fix_mae,sn_mae, bp_ise,fix_ise,sn_ise, ...
-          bp_itae,fix_itae,sn_itae, bp_stl,fix_stl,sn_stl, ...
-          bp_du,fix_du,sn_du, bp_peak,fix_peak,sn_peak] = ...
-        metrics3(y_bp, e_bp, r_seq, y_fix, e_fix, y_sn, e_sn, u_bp, u_fix, u_sn)
+function [bp_mae,fix_mae, bp_ise,fix_ise, ...
+          bp_itae,fix_itae, bp_stl,fix_stl, ...
+          bp_du,fix_du, bp_peak,fix_peak] = ...
+        metrics2(y_bp, e_bp, r_seq, y_fix, e_fix, u_bp, u_fix)
     N = length(e_bp);
 
     % MAE
-    bp_mae=mean(abs(e_bp)); fix_mae=mean(abs(e_fix)); sn_mae=mean(abs(e_sn));
+    bp_mae=mean(abs(e_bp)); fix_mae=mean(abs(e_fix));
 
     % ISE (积分平方误差)
-    bp_ise=sum(e_bp.^2)/N; fix_ise=sum(e_fix.^2)/N; sn_ise=sum(e_sn.^2)/N;
+    bp_ise=sum(e_bp.^2)/N; fix_ise=sum(e_fix.^2)/N;
 
     % ITAE (时间加权)
     k_vec=1:N;
-    bp_itae=sum(k_vec.*abs(e_bp)); fix_itae=sum(k_vec.*abs(e_fix)); sn_itae=sum(k_vec.*abs(e_sn));
+    bp_itae=sum(k_vec.*abs(e_bp)); fix_itae=sum(k_vec.*abs(e_fix));
 
     % 调节时间
     band=0.05;
     bp_last=find(abs(y_bp-r_seq)>band.*abs(r_seq+1e-6),1,'last');
     fix_last=find(abs(y_fix-r_seq)>band.*abs(r_seq+1e-6),1,'last');
-    sn_last=find(abs(y_sn-r_seq)>band.*abs(r_seq+1e-6),1,'last');
     bp_stl=bp_last; if isempty(bp_stl),bp_stl=0;end
     fix_stl=fix_last; if isempty(fix_stl),fix_stl=0;end
-    sn_stl=sn_last; if isempty(sn_stl),sn_stl=0;end
 
     % RMS(Δu)
     bp_du=sqrt(mean(diff(u_bp).^2));
     fix_du=sqrt(mean(diff(u_fix).^2));
-    sn_du=sqrt(mean(diff(u_sn).^2));
 
     % 峰值控制量
-    bp_peak=max(abs(u_bp)); fix_peak=max(abs(u_fix)); sn_peak=max(abs(u_sn));
+    bp_peak=max(abs(u_bp)); fix_peak=max(abs(u_fix));
 end
 
 %% ==================== BP-PID 仿真（含场景参数） ====================
@@ -186,10 +182,13 @@ function [y, error, u] = sim_bp_pid(N, scenario, plant_id, w1, w2)
     switch plant_id
         case 'plant1'
             rate = 0.005;  Kp_max = 2.0;  Ki_max = 0.5;  Kd_max = 1.0;
+            jac_type = 'fd';
         case 'plant2'
-            rate = 0.003;  Kp_max = 10.0;  Ki_max = 1.0;  Kd_max = 25.0;
+            rate = 0.005;  Kp_max = 10.0; Ki_max = 1.0;  Kd_max = 25.0;
+            jac_type = 'model';  jac_val = 1.5;
         case 'plant3'
-            rate = 0.003;  Kp_max = 3.0;  Ki_max = 0.5;  Kd_max = 3.0;
+            rate = 0.005;  Kp_max = 3.0;  Ki_max = 0.5;  Kd_max = 3.0;
+            jac_type = 'model';
     end
     rate2 = 0.01;
     scale_vec = [Kp_max, Ki_max, Kd_max];
@@ -252,8 +251,12 @@ function [y, error, u] = sim_bp_pid(N, scenario, plant_id, w1, w2)
                 dO3(j) = 0.2;
             end
         end
-        dydu = (y_true - y_1) / (u_k - u_1 + 0.0001);
-        du_sys = max(-1, min(1, dydu));
+        if strcmp(jac_type, 'fd')
+            dydu = (y_true - y_1) / (u_k - u_1 + 0.0001);
+            du_sys = max(-1, min(1, dydu));
+        else
+            du_sys = get_model_jacobian(plant_id, u_k);
+        end
 
         delta3 = zeros(1, Out);
         for l = 1:Out
@@ -281,61 +284,6 @@ function [y, error, u] = sim_bp_pid(N, scenario, plant_id, w1, w2)
         w1_2 = w1_1;  w1_1 = w1;
         error_2 = error_1;
         error_1 = error(k);
-    end
-end
-
-%% ==================== 单神经元自适应 PID 仿真 ====================
-
-function [y, error, u] = sim_sn_pid(N, scenario, plant_id)
-    K_neuron = 0.8;    % 神经元增益
-    eta = 0.05;         % Hebbian 学习率
-    w = [0.3, 0.3, 0.3];  % 初始权重
-
-    y_1 = 0;  y_2 = 0;  u_1 = 0;  error_1 = 0;  error_2 = 0;
-    y = zeros(1, N);  error = zeros(1, N);  u = zeros(1, N);
-    y_true = 0;
-    u_buf = zeros(1, 8);
-
-    rng(42);
-
-    for k = 1:N
-        r_k = get_target(k, scenario);
-        y_fb = get_feedback(y_true, k, scenario);
-
-        e_cur = r_k - y_fb;
-        error(k) = e_cur;
-
-        % 单神经元输入（同增量PID三项）
-        x1 = e_cur;                              % P: e(k)
-        x2 = e_cur - error_1;                    % I: Δe(k)
-        x3 = e_cur - 2*error_1 + error_2;        % D: Δ²e(k)
-
-        % 权值归一化
-        w_sum = abs(w(1)) + abs(w(2)) + abs(w(3)) + 1e-6;
-        w1_n = w(1) / w_sum;
-        w2_n = w(2) / w_sum;
-        w3_n = w(3) / w_sum;
-
-        % 控制量（增量式）
-        delta_u = K_neuron * (w1_n*x1 + w2_n*x2 + w3_n*x3);
-        delta_u = max(-0.5, min(0.5, delta_u));
-        u_k = u_1 + delta_u;
-        u(k) = u_k;
-
-        % 被控对象
-        a_override = get_ak(k, scenario);
-        y_true = plant_dynamics(plant_id, y_1, y_2, u_k, u_1, k, a_override);
-        y(k) = y_true;
-
-        % 监督 Hebbian 权值更新
-        w(1) = w(1) + eta * e_cur * x1;
-        w(2) = w(2) + eta * e_cur * x2;
-        w(3) = w(3) + eta * e_cur * x3;
-
-        % 状态缓存
-        u_1 = u_k;  y_2 = y_1;  y_1 = y_true;
-        error_2 = error_1;
-        error_1 = e_cur;
     end
 end
 
@@ -444,5 +392,17 @@ function y_fb = get_feedback(y_true, k, scenario)
             if k == 700, y_fb = y_fb - 0.3; end
         otherwise
             y_fb = y_true;
+    end
+end
+
+%% ==================== 模型解析 Jacobian ====================
+function du_sys = get_model_jacobian(plant_id, u_k)
+    switch plant_id
+        case 'plant2'
+            du_sys = 1.5;                           % 二阶对象稳态增益
+        case 'plant3'
+            du_sys = 1.333 * (1 + 0.6*u_k - 0.3*u_k^2);  % 稳态增益 × ∂v/∂u
+        otherwise
+            du_sys = 1.0;
     end
 end

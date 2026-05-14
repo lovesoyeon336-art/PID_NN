@@ -2,10 +2,10 @@ clear; close all;
 
 %% ==================== 预训练 —— 对象3（Hammerstein 非线性） ====================
 IN = 4;   H = 5;   Out = 3;
-rate  = 0.003;
+rate  = 0.015;
 rate2 = 0.01;
 N_pretrain = 1000;
-epochs = 4;
+epochs = 8;
 
 Kp_max = 3.0;  Ki_max = 0.5;  Kd_max = 3.0;
 scale_vec = [Kp_max, Ki_max, Kd_max];
@@ -62,8 +62,7 @@ for ep = 1:epochs
             if O3(j) > 0, dO3(j) = 1; else, dO3(j) = 0.2; end
         end
 
-        dydu = (y(k) - y_1) / (u(k) - u_1 + 0.0001);
-        du_sys = max(-1, min(1, dydu));
+        du_sys = 1.333 * (1 + 0.6*u(k) - 0.3*u(k)^2);  % 稳态增益 × ∂v/∂u
 
         delta3 = zeros(1, Out);
         for l = 1:Out

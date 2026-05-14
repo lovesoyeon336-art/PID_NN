@@ -2,10 +2,10 @@ clear; close all;
 
 %% ==================== 预训练 —— 对象2（二阶+死区） ====================
 IN = 4;   H = 5;   Out = 3;
-rate  = 0.002;
+rate  = 0.05;
 rate2 = 0.01;
 N_pretrain = 1000;
-epochs = 5;
+epochs = 8;
 
 Kp_max = 10.0;  Ki_max = 1.0;  Kd_max = 25.0;
 scale_vec = [Kp_max, Ki_max, Kd_max];
@@ -63,8 +63,7 @@ for ep = 1:epochs
             if O3(j) > 0, dO3(j) = 1; else, dO3(j) = 0.2; end
         end
 
-        dydu = (y(k) - y_1) / (u(k) - u_1 + 0.0001);
-        du_sys = max(-1, min(1, dydu));
+        du_sys = 1.5;  % plant2 稳态增益: (b1+b2)/(1-a1-a2)
 
         delta3 = zeros(1, Out);
         for l = 1:Out
