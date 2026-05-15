@@ -2,13 +2,14 @@ clear; close all;
 
 %% ==================== 超参数 ====================
 IN = 5;   H = 5;   Out = 3;
-rate  = 0.005;
+rate  = 0.003;  % 预训练保持保守
 rate2 = 0.01;
-N_pretrain = 1000;              % 预训练步数
-epochs = 7;                     % 前4轮斜坡+第5-6轮阶跃+后1轮多样化
+N_pretrain = 2000;              % 预训练步数（翻倍增加样本）
+epochs = 15;                    % 前5轮斜坡筑基 + 后10轮多样化泛化
 
-Kp_max = 2.0;  Ki_max = 2.0;  Kd_max = 1.0;
+Kp_max = 2.0;  Ki_max = 0.2;  Kd_max = 0.0;
 scale_vec = [Kp_max, Ki_max, Kd_max];
+ff_gain = 0.0;  beta_sp = 1.00;
 
 %% ==================== Xavier 权重初始化 ====================
 rng(1);
@@ -19,8 +20,10 @@ w2 = sqrt(2/(H+Out)) * randn(Out, H);
 for ep = 1:epochs
 
     % ---- 重置 plant 状态 ----
-    y_1 = 0;  u_1 = 0;
-    error_1 = 0;  error_2 = 0;
+    y_1 = 0;  u_1 = 0;  u_2 = 0;  r_1 = 0;
+    error_1 = 0;  error_2 = 0;  e_sp_1 = 0;  e_sp_2 = 0;
+    st_has = false;  st_ep = zeros(3,1);  st_O2 = zeros(1,H);
+    st_dO3 = zeros(1,Out);  st_dO2 = zeros(1,H);  st_I1 = zeros(1,IN);
 
     % ---- 动量缓存 ----
     w1_1 = w1;  w1_2 = w1;
@@ -42,7 +45,7 @@ for ep = 1:epochs
         error(k) = r(k) - y_1;
 
         % 前向传播
-        I1 = [r(k), y_1, error(k), error_1, 1];
+        I1 = [r(k), y_1, error(k), r(k)-r_1, 1];
         I2 = I1 * w1';
         O2 = tanh(I2);
 
@@ -63,61 +66,71 @@ for ep = 1:epochs
         Kpid = [kp_arr(k), ki_arr(k), kd_arr(k)];
 
         % PID
-        e_pid = [error(k) - error_1;
+        e_sp_k = beta_sp * r(k) - y_1;
+        e_pid = [e_sp_k - e_sp_1;
                  error(k);
-                 error(k) - 2*error_1 + error_2];
+                 e_sp_k - 2*e_sp_1 + e_sp_2];
         delta_u = Kpid * e_pid;
-        du_max = 0.5;
+        dr = r(k) - r_1;
+        if abs(dr) <= 0.1, delta_u = delta_u + ff_gain * dr; end
+        du_max = 1.0;
         delta_u = max(-du_max, min(du_max, delta_u));
         u(k) = u_1 + delta_u;
 
-        % 被控对象
-        y(k) = plant_dynamics('plant1', y_1, 0, u(k), u_1, k);
+        % 被控对象 (y(k) 由 u(k-1) 驱动)
+        y(k) = plant_dynamics('plant1', y_1, 0, u_1, u_1, k);
         error(k) = r(k) - y(k);
 
-        % 反向传播（误差死区）
-        dead_zone = 0.01;
-        if abs(error(k)) >= dead_zone
-        dO3 = zeros(1, Out);
-        for j = 1:Out
-            if O3(j) > 0
-                dO3(j) = 1;
-            else
-                dO3(j) = 0.2;
-            end
-        end
-
-        dydu = (y(k) - y_1) / (u(k) - u_1 + 0.0001);
+        % 延时反向传播（用上一拍存储状态 + 当前误差）
+        dead_zone = 0.002;
+        if st_has && abs(error(k)) >= dead_zone
+        dydu = (y(k) - y_1) / (u_1 - u_2 + 0.0001);
         du_sys = max(-1, min(1, dydu));
 
         delta3 = zeros(1, Out);
         for l = 1:Out
-            delta3(l) = error(k) * du_sys * scale_vec(l) * e_pid(l) * dO3(l);
+            e_grad = max(-0.5, min(0.5, error(k)));
+            delta3(l) = e_grad * du_sys * scale_vec(l) * st_ep(l) * st_dO3(l);
         end
 
         d_w2 = zeros(Out, H);
         for l = 1:Out
             for i = 1:H
-                d_w2(l, i) = rate * delta3(l) * O2(i);
+                d_w2(l, i) = rate * delta3(l) * st_O2(i);
             end
         end
         w2 = w2_1 + d_w2 + rate2 * 2 * (w2_1 - w2_2);
 
-        dO2 = 1 - tanh(I2).^2;
-        a_back = delta3 * w2;
-        delta2 = dO2 .* a_back;
+        a_back = delta3 * w2_1;
+        delta2 = st_dO2 .* a_back;
+        d_w1 = rate * delta2' * st_I1;
+        w1 = w1_1 + d_w1 + rate2 * 2 * (w1_1 - w1_2);
 
-        d_w1 = rate * delta2' * I1;
-        w1 = w1_1 + d_w1 + rate2 * (w1_1 - w1_2);
-        end  % 误差死区
-
-        % 状态缓存
-        u_1 = u(k);
-        y_1 = y(k);
         w2_2 = w2_1;  w2_1 = w2;
         w1_2 = w1_1;  w1_1 = w1;
+        end  % 误差死区
+
+        % 存储当前步状态
+        st_has = true;
+        st_ep  = e_pid;
+        st_O2  = O2;
+        st_I1  = I1;
+        dO3_t = zeros(1, Out);
+        for j = 1:Out
+            if O3(j) > 0, dO3_t(j) = 1; else, dO3_t(j) = 0.2; end
+        end
+        st_dO3 = dO3_t;
+        st_dO2 = 1 - tanh(I2).^2;
+
+        % 状态缓存
+        u_2 = u_1;
+        u_1 = u(k);
+        y_1 = y(k);
+        r_1 = r(k);
         error_2 = error_1;
         error_1 = error(k);
+        e_sp_2 = e_sp_1;
+        e_sp_1 = e_sp_k;
     end
 
     fprintf('Epoch %d/%d  MAE: %.6f\n', ep, epochs, sum(abs(error)) / N_pretrain);
@@ -130,19 +143,18 @@ fprintf('权重已保存至 bp_pretrained_weights.mat\n');
 
 %% ==================== 渐进式参考信号 ====================
 function r_k = get_pretrain_r(k, N_total, ep, epochs)
-    if ep <= 4                     % 前4轮：纯斜坡学积分
+    if ep <= 5                     % 前5轮：斜坡筑基
         r_k = 0.5 + 1.5 * min(1, k / N_total);
         return
-    elseif ep <= 6                 % 第5-6轮：纯阶跃学比例
-        r_k = 1;
-        return
     end
-    phase = k / N_total;           % 第7轮：多样化泛化
-    if phase < 0.2
-        r_k = 1;
-    elseif phase < 0.4
-        r_k = 1 + 0.5 * sin(2*pi*0.01*k);
-    elseif phase < 0.6
+    phase = k / N_total;           % 第4-15轮：多样化泛化（12轮）
+    if phase < 0.15
+        r_k = 1;                                                  % 阶跃
+    elseif phase < 0.30
+        r_k = 1 + 0.5 * sin(2*pi*0.005*k);                       % sine_low 频率对齐
+    elseif phase < 0.45
+        r_k = 1 + 0.5 * sin(2*pi*0.02*k);                        % sine_high 频率对齐
+    elseif phase < 0.55
         persistent rand_val rand_hold
         if isempty(rand_val) || rand_hold <= 0
             rand_val = 0.5 + 1.5 * rand();
@@ -150,11 +162,11 @@ function r_k = get_pretrain_r(k, N_total, ep, epochs)
         end
         rand_hold = rand_hold - 1;
         r_k = rand_val;
-    elseif phase < 0.8
-        local_k = k - round(0.6 * N_total);
-        local_N = round(0.2 * N_total);
-        r_k = 0.5 + 1.5 * min(1, local_k / max(local_N, 1));
+    elseif phase < 0.70
+        local_k = k - round(0.55 * N_total);
+        local_N = round(0.15 * N_total);
+        r_k = 0.5 + 1.5 * min(1, local_k / max(local_N, 1));     % 斜坡
     else
-        r_k = 1 + 0.3 * sin(2*pi*0.03*k);
+        r_k = 1 + 0.6*sin(2*pi*0.005*k) + 0.3*sin(2*pi*0.03*k); % composite 对齐
     end
 end
