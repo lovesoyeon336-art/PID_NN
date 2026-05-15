@@ -24,20 +24,20 @@ N = 2000;
 
 % {plant_id, scenario, display_name}
 sc_defs = {
-    'plant1', 'step',        '1.基本阶跃';
-    'plant1', 'sine_low',    '2.正弦低频';
-    'plant1', 'sine_high',   '3.正弦高频';
-    'plant1', 'ramp',        '4.斜坡跟踪';
-    'plant1', 'perturb',     '5.参数摄动';
-    'plant1', 'disturb',     '6.输出扰动';
-    'plant1', 'noise',       '7.量测噪声';
-    'plant2', 'step',        '8.对象2阶跃';
-    'plant2', 'sine_low',    '9.对象2正弦低频';
-    'plant2', 'sine_high',   '10.对象2正弦高频';
-    'plant2', 'ramp',        '11.对象2斜坡';
-    'plant2', 'disturb',     '12.对象2扰动';
-    'plant2', 'noise',       '13.对象2噪声';
-    'plant2', 'square',      '14.对象2方波';
+    'plant1', 'step',        '1. Plant1 基本阶跃';
+    'plant1', 'sine_low',    '2. Plant1 正弦低频 (f=0.005, T≈200步)';
+    'plant1', 'sine_high',   '3. Plant1 正弦高频 (f=0.02, T≈50步)';
+    'plant1', 'ramp',        '4. Plant1 斜坡跟踪 (0→1, 500步)';
+    'plant1', 'perturb',     '5. Plant1 参数摄动 (a×1.3@k∈501-1000, a×0.7@k>1500)';
+    'plant1', 'disturb',     '6. Plant1 输出扰动 (+0.5脉冲@k=500)';
+    'plant1', 'noise',       '7. Plant1 量测噪声 (±0.02均匀)';
+    'plant2', 'step',        '8. Plant2 基本阶跃';
+    'plant2', 'sine_low',    '9. Plant2 正弦低频 (f=0.005, T≈200步)';
+    'plant2', 'sine_high',   '10. Plant2 正弦高频 (f=0.02, T≈50步)';
+    'plant2', 'ramp',        '11. Plant2 斜坡跟踪 (0→1, 500步)';
+    'plant2', 'disturb',     '12. Plant2 输出扰动 (+0.5脉冲@k=500)';
+    'plant2', 'noise',       '13. Plant2 量测噪声 (±0.02均匀)';
+    'plant2', 'square',      '14. Plant2 方波 (1↔2, 周期200步)';
 };
 nS = size(sc_defs, 1);
 
@@ -113,54 +113,54 @@ fprintf('\n----- 综合 ITAE -----\n');
 fprintf('BP-PID=%.2f  固定PID=%.2f\n', sum(BP_ITAE), sum(Fix_ITAE));
 
 %% ==================== 绘图 ====================
-figure('Name', 'MAE/ISE/ITAE/Δu/PeakU 指标对比', 'NumberTitle', 'off');
-metrics_names = {'MAE', 'ISE', 'ITAE', 'RMS(Δu)', 'Peak |u|'};
+fig_dir = fullfile(script_dir, 'figures');
+if ~exist(fig_dir, 'dir'), mkdir(fig_dir); end
+
+% --- 指标柱状图（每指标独立一张） ---
+metrics_data = {BP_MAE,Fix_MAE,'MAE'; BP_ISE,Fix_ISE,'ISE';
+                BP_ITAE,Fix_ITAE,'ITAE'; BP_dU,Fix_dU,'RMS dU'; BP_PeakU,Fix_PeakU,'Peak u'};
 for p = 1:5
-    subplot(2,3,p);
-    switch p
-        case 1, bp_d=BP_MAE; fix_d=Fix_MAE;
-        case 2, bp_d=BP_ISE; fix_d=Fix_ISE;
-        case 3, bp_d=BP_ITAE; fix_d=Fix_ITAE;
-        case 4, bp_d=BP_dU;  fix_d=Fix_dU;
-        case 5, bp_d=BP_PeakU; fix_d=Fix_PeakU;
-    end
-    bar([bp_d(:),fix_d(:)]);
-    set(gca,'XTickLabel',sc_defs(:,3));
-    xtickangle(45);
-    if p==1, legend('BP-PID','固定PID','Location','best'); end
-    title(metrics_names{p}); grid on;
+    figure('Visible','off');
+    bar([metrics_data{p,1}(:), metrics_data{p,2}(:)]);
+    set(gca,'XTickLabel',sc_defs(:,3)); xtickangle(45);
+    legend('BP-PID','固定PID','Location','best');
+    title(metrics_data{p,3}); grid on;
+    saveas(gcf, fullfile(fig_dir, sprintf('01_%s.png', strrep(metrics_data{p,3},' ','_'))));
+    close(gcf);
 end
 
-figure('Name', '超调/峰值误差/稳态误差 对比', 'NumberTitle', 'off');
-dyn_names = {'超调量', '峰值动态误差', '稳态误差'};
-for p = 1:3
-    subplot(1,3,p);
-    switch p
-        case 1, bp_d=BP_Ov; fix_d=Fix_Ov;
-        case 2, bp_d=BP_Pk; fix_d=Fix_Pk;
-        case 3, bp_d=BP_Ss; fix_d=Fix_Ss;
-    end
-    bar([bp_d(:),fix_d(:)]);
-    set(gca,'XTickLabel',sc_defs(:,3));
-    xtickangle(45);
-    if p==1, legend('BP-PID','固定PID','Location','best'); end
-    title(dyn_names{p}); grid on;
+% --- 动态性能柱状图（每指标独立一张） ---
+dyn_data = {BP_Ov,Fix_Ov,'超调量'; BP_Ss,Fix_Ss,'稳态误差'};
+for p = 1:2
+    figure('Visible','off');
+    bar([dyn_data{p,1}(:), dyn_data{p,2}(:)]);
+    set(gca,'XTickLabel',sc_defs(:,3)); xtickangle(45);
+    legend('BP-PID','固定PID','Location','best');
+    title(dyn_data{p,3}); grid on;
+    saveas(gcf, fullfile(fig_dir, sprintf('02_%s.png', dyn_data{p,3})));
+    close(gcf);
 end
 
-fx=[1,min(500,N)];
-nFigs = ceil(nS/6);
-for fig=1:nFigs
-    figure('Name',sprintf('时域响应 %d',fig),'NumberTitle','off');
-    s0=(fig-1)*6;
-    for s=1:min(6,nS-s0)
-        subplot(2,3,s); idx=s0+s;
-        r_plot=R_seq{idx}; yb=Y_bp{idx}; yf=Y_fix{idx};
-        plot(1:N,r_plot,'r',1:N,yf,'g',1:N,yb,'b--','LineWidth',0.8);
-        xlim(fx); xlabel('步'); ylabel('y');
-        if s==1, legend('目标','固定PID','BP-PID','Location','best'); end
-        title(sc_defs{idx,3}); grid on;
+% --- 时域响应图（每场景独立一张） ---
+fx = [1, min(500, N)];
+for idx = 1:nS
+    figure('Visible','off');
+    r_plot = R_seq{idx}; yb = Y_bp{idx}; yf = Y_fix{idx};
+    plot(1:N, r_plot, 'r', 1:N, yf, 'g', 1:N, yb, 'b--', 'LineWidth', 0.8);
+    xlim(fx); xlabel('步'); ylabel('y');
+    legend('目标','固定PID','BP-PID','Location','best');
+    ttl = sc_defs{idx, 3};
+    if strcmp(sc_defs{idx, 1}, 'plant1')
+        ttl = sprintf('%s\nPlant1: y(k)=a/(1+y^2)*y(k-1)+u(k-1)', ttl);
+    else
+        ttl = sprintf('%s\nPlant2: y(k)=1.7y(k-1)-0.72y(k-2)+0.03u(k-1)', ttl);
     end
+    title(ttl, 'FontSize', 8); grid on;
+    saveas(gcf, fullfile(fig_dir, sprintf('03_timeseries_%02d.png', idx)));
+    close(gcf);
 end
+
+fprintf('图片已保存至 %s（共 %d 张）\n', fig_dir, 5+2+nS);
 
 %% ==================== 保存 ====================
 save(fullfile(script_dir, 'test_results.mat'), ...
