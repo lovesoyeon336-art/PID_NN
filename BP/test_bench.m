@@ -120,34 +120,31 @@ if ~exist(fig_dir, 'dir'), mkdir(fig_dir); end
 metrics_data = {BP_MAE,Fix_MAE,'MAE'; BP_ISE,Fix_ISE,'ISE';
                 BP_ITAE,Fix_ITAE,'ITAE'; BP_dU,Fix_dU,'RMS dU'; BP_PeakU,Fix_PeakU,'Peak u'};
 for p = 1:5
-    figure('Visible','off');
+    figure('Name', metrics_data{p,3}, 'NumberTitle', 'off');
     bar([metrics_data{p,1}(:), metrics_data{p,2}(:)]);
     set(gca,'XTickLabel',sc_defs(:,3)); xtickangle(45);
     legend('BP-PID','固定PID','Location','best');
     title(metrics_data{p,3}); grid on;
     saveas(gcf, fullfile(fig_dir, sprintf('01_%s.png', strrep(metrics_data{p,3},' ','_'))));
-    close(gcf);
 end
 
 % --- 动态性能柱状图（每指标独立一张） ---
 dyn_data = {BP_Ov,Fix_Ov,'超调量'; BP_Ss,Fix_Ss,'稳态误差'};
 for p = 1:2
-    figure('Visible','off');
+    figure('Name', dyn_data{p,3}, 'NumberTitle', 'off');
     bar([dyn_data{p,1}(:), dyn_data{p,2}(:)]);
     set(gca,'XTickLabel',sc_defs(:,3)); xtickangle(45);
     legend('BP-PID','固定PID','Location','best');
     title(dyn_data{p,3}); grid on;
     saveas(gcf, fullfile(fig_dir, sprintf('02_%s.png', dyn_data{p,3})));
-    close(gcf);
 end
 
-% --- 时域响应图（每场景独立一张） ---
-fx = [1, min(500, N)];
+% --- 时域响应图（每场景独立一张，全2000步） ---
 for idx = 1:nS
-    figure('Visible','off');
+    figure('Name', sc_defs{idx,3}, 'NumberTitle', 'off');
     r_plot = R_seq{idx}; yb = Y_bp{idx}; yf = Y_fix{idx};
     plot(1:N, r_plot, 'r', 1:N, yf, 'g', 1:N, yb, 'b--', 'LineWidth', 0.8);
-    xlim(fx); xlabel('步'); ylabel('y');
+    xlim([1, N]); xlabel('步'); ylabel('y');
     legend('目标','固定PID','BP-PID','Location','best');
     ttl = sc_defs{idx, 3};
     if strcmp(sc_defs{idx, 1}, 'plant1')
@@ -157,7 +154,6 @@ for idx = 1:nS
     end
     title(ttl, 'FontSize', 8); grid on;
     saveas(gcf, fullfile(fig_dir, sprintf('03_timeseries_%02d.png', idx)));
-    close(gcf);
 end
 
 fprintf('图片已保存至 %s（共 %d 张）\n', fig_dir, 5+2+nS);
