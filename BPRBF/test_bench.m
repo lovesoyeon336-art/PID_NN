@@ -3,56 +3,61 @@ clear; close all;
 %% ==================== 加载整定参数和预训练权重 ====================
 [script_dir, ~, ~] = fileparts(mfilename('fullpath'));
 
-tuned = load(fullfile(script_dir, 'pid_tuned_params.mat'));
-Kp_fix = tuned.Kp_opt;
-Ki_fix = tuned.Ki_opt;
-Kd_fix = tuned.Kd_opt;
-
-pretrain1 = load(fullfile(script_dir, 'bp_pretrained_weights.mat'));
-pretrain2 = load(fullfile(script_dir, 'bp_pretrained_weights_plant2.mat'));
-pretrain3 = load(fullfile(script_dir, 'bp_pretrained_weights_plant3.mat'));
-
-fprintf('对象1 PID: Kp=%.4f  Ki=%.4f  Kd=%.4f\n', Kp_fix, Ki_fix, Kd_fix);
-
-%% ==================== 加载各对象固定PID ====================
+tuned1 = load(fullfile(script_dir, 'pid_tuned_params.mat'));
 tuned2 = load(fullfile(script_dir, 'pid_tuned_params_plant2.mat'));
-tuned3 = load(fullfile(script_dir, 'pid_tuned_params_plant3.mat'));
-fprintf('对象2 PID: Kp=%.4f  Ki=%.4f  Kd=%.4f\n', tuned2.Kp_opt, tuned2.Ki_opt, tuned2.Kd_opt);
-fprintf('对象3 PID: Kp=%.4f  Ki=%.4f  Kd=%.4f\n', tuned3.Kp_opt, tuned3.Ki_opt, tuned3.Kd_opt);
 
-%% ==================== 16 场景测试矩阵 ====================
+% BPRBF 预训练权重（RBF Jacobian）
+pretrain_rbf1 = load(fullfile(script_dir, 'bp_pretrained_weights.mat'));
+pretrain_rbf2 = load(fullfile(script_dir, 'bp_pretrained_weights_plant2.mat'));
+
+% BPPID 预训练权重（FD Jacobian，来自 BP 文件夹）
+bp_dir = fullfile(script_dir, '..', 'BP');
+pretrain_bp1 = load(fullfile(bp_dir, 'bp_pretrained_weights.mat'));
+pretrain_bp2 = load(fullfile(bp_dir, 'bp_pretrained_weights_plant2.mat'));
+
+fprintf('Plant1 逐场景PID:\n');
+for s = 1:length(tuned1.scenarios)
+    fprintf('  %-10s  Kp=%.4f  Ki=%.4f\n', tuned1.scenarios{s}, tuned1.Kp_opt(s), tuned1.Ki_opt(s));
+end
+fprintf('Plant2 逐场景PID:\n');
+for s = 1:length(tuned2.scenarios)
+    fprintf('  %-10s  Kp=%.4f  Ki=%.4f\n', tuned2.scenarios{s}, tuned2.Kp_opt(s), tuned2.Ki_opt(s));
+end
+
+%% ==================== 14 场景测试矩阵 ====================
 
 N = 2000;
 
-% {plant_id, scenario, display_name}
 sc_defs = {
-    'plant1', 'step',        '1.基本阶跃';
-    'plant1', 'sine_low',    '2.正弦低频';
-    'plant1', 'sine_high',   '3.正弦高频';
-    'plant1', 'ramp',        '4.斜坡跟踪';
-    'plant1', 'composite',   '5.复合信号';
-    'plant1', 'random_step', '6.随机阶跃';
-    'plant1', 'perturb',     '7.参数摄动';
-    'plant1', 'disturb',     '8.输出扰动';
-    'plant1', 'noise',       '9.量测噪声';
-    'plant1', 'drift',       '10.对象永久变异';
-    'plant1', 'combo',       '11.复合扰动+噪声';
-    'plant2', 'step',        '12.对象2阶跃';
-    'plant2', 'sine_low',    '13.对象2正弦';
-    'plant2', 'square',      '14.对象2方波';
-    'plant3', 'step',        '15.对象3阶跃';
-    'plant3', 'sine_low',    '16.对象3正弦';
+    'plant1', 'step',        '1. Plant1 基本阶跃';
+    'plant1', 'sine_low',    '2. Plant1 正弦低频 (f=0.005, T≈200步)';
+    'plant1', 'sine_high',   '3. Plant1 正弦高频 (f=0.02, T≈50步)';
+    'plant1', 'ramp',        '4. Plant1 斜坡跟踪 (0→1, 500步)';
+    'plant1', 'perturb',     '5. Plant1 参数摄动 (a×1.3@k∈501-1000, a×0.7@k>1500)';
+    'plant1', 'disturb',     '6. Plant1 输出扰动 (+0.5脉冲@k=500)';
+    'plant1', 'noise',       '7. Plant1 量测噪声 (±0.02均匀)';
+    'plant2', 'step',        '8. Plant2 基本阶跃';
+    'plant2', 'sine_low',    '9. Plant2 正弦低频 (f=0.005, T≈200步)';
+    'plant2', 'sine_high',   '10. Plant2 正弦高频 (f=0.02, T≈50步)';
+    'plant2', 'ramp',        '11. Plant2 斜坡跟踪 (0→1, 500步)';
+    'plant2', 'disturb',     '12. Plant2 输出扰动 (+0.5脉冲@k=500)';
+    'plant2', 'noise',       '13. Plant2 量测噪声 (±0.02均匀)';
+    'plant2', 'square',      '14. Plant2 方波 (1↔2, 周期200步)';
 };
 nS = size(sc_defs, 1);
 
-BP_MAE=zeros(1,nS); Fix_MAE=zeros(1,nS); SN_MAE=zeros(1,nS);
-BP_ISE=zeros(1,nS); Fix_ISE=zeros(1,nS); SN_ISE=zeros(1,nS);
-BP_ITAE=zeros(1,nS); Fix_ITAE=zeros(1,nS); SN_ITAE=zeros(1,nS);
-BP_Stl=zeros(1,nS); Fix_Stl=zeros(1,nS); SN_Stl=zeros(1,nS);
-BP_dU=zeros(1,nS);  Fix_dU=zeros(1,nS);  SN_dU=zeros(1,nS);
-BP_PeakU=zeros(1,nS); Fix_PeakU=zeros(1,nS); SN_PeakU=zeros(1,nS);
+% 三组指标数组: RBF=BP+RBF Jacobian, BP=BP+FD Jacobian, Fix=固定PID
+RBF_MAE=zeros(1,nS); BP_MAE=zeros(1,nS);  Fix_MAE=zeros(1,nS);
+RBF_ISE=zeros(1,nS); BP_ISE=zeros(1,nS);  Fix_ISE=zeros(1,nS);
+RBF_ITAE=zeros(1,nS);BP_ITAE=zeros(1,nS); Fix_ITAE=zeros(1,nS);
+RBF_Stl=zeros(1,nS); BP_Stl=zeros(1,nS);  Fix_Stl=zeros(1,nS);
+RBF_dU=zeros(1,nS);  BP_dU=zeros(1,nS);   Fix_dU=zeros(1,nS);
+RBF_PeakU=zeros(1,nS);BP_PeakU=zeros(1,nS);Fix_PeakU=zeros(1,nS);
+RBF_Ov=zeros(1,nS);  BP_Ov=zeros(1,nS);   Fix_Ov=zeros(1,nS);
+RBF_Pk=zeros(1,nS);  BP_Pk=zeros(1,nS);   Fix_Pk=zeros(1,nS);
+RBF_Ss=zeros(1,nS);  BP_Ss=zeros(1,nS);   Fix_Ss=zeros(1,nS);
 
-Y_bp=cell(1,nS); Y_fix=cell(1,nS); Y_sn=cell(1,nS); R_seq=cell(1,nS);
+Y_rbf=cell(1,nS); Y_bp=cell(1,nS); Y_fix=cell(1,nS); R_seq=cell(1,nS);
 
 for i = 1:nS
     pid = sc_defs{i,1};
@@ -61,135 +66,170 @@ for i = 1:nS
 
     switch pid
         case 'plant1'
-            KpF = Kp_fix; KiF = Ki_fix; KdF = Kd_fix;
-            w1p = pretrain1.w1; w2p = pretrain1.w2;
+            idx = find(strcmp(tuned1.scenarios, sc), 1);
+            KpF = tuned1.Kp_opt(idx); KiF = tuned1.Ki_opt(idx); KdF = tuned1.Kd_opt(idx);
+            % 两个控制器均使用 BP 预训练权重（隔离 Jacobian 来源为唯一变量）
+            w1rf = pretrain_bp1.w1;  w2rf = pretrain_bp1.w2;
+            w1bp = pretrain_bp1.w1;  w2bp = pretrain_bp1.w2;
         case 'plant2'
-            KpF = tuned2.Kp_opt; KiF = tuned2.Ki_opt; KdF = tuned2.Kd_opt;
-            w1p = pretrain2.w1; w2p = pretrain2.w2;
-        case 'plant3'
-            KpF = tuned3.Kp_opt; KiF = tuned3.Ki_opt; KdF = tuned3.Kd_opt;
-            w1p = pretrain3.w1; w2p = pretrain3.w2;
+            idx = find(strcmp(tuned2.scenarios, sc), 1);
+            KpF = tuned2.Kp_opt(idx); KiF = tuned2.Ki_opt(idx); KdF = tuned2.Kd_opt(idx);
+            w1rf = pretrain_bp2.w1;  w2rf = pretrain_bp2.w2;
+            w1bp = pretrain_bp2.w1;  w2bp = pretrain_bp2.w2;
     end
 
-    [y_bp, e_bp, u_bp] = sim_bp_pid(N, sc, pid, w1p, w2p);
+    [y_rbf, e_rbf, u_rbf] = sim_bp_rbf(N, sc, pid, w1rf, w2rf);
+    [y_bp,  e_bp,  u_bp]  = sim_bp_fd(N, sc, pid, w1bp, w2bp);
     [y_fix, e_fix, u_fix] = sim_fix_pid(N, sc, pid, KpF, KiF, KdF);
-    [y_sn, e_sn, u_sn] = sim_sn_pid(N, sc, pid);
 
-    [BP_MAE(i),Fix_MAE(i),SN_MAE(i), BP_ISE(i),Fix_ISE(i),SN_ISE(i), ...
-     BP_ITAE(i),Fix_ITAE(i),SN_ITAE(i), ...
-     BP_Stl(i),Fix_Stl(i),SN_Stl(i), ...
-     BP_dU(i),Fix_dU(i),SN_dU(i), ...
-     BP_PeakU(i),Fix_PeakU(i),SN_PeakU(i)] = ...
-        metrics3(y_bp,e_bp,r_seq, y_fix,e_fix, y_sn,e_sn, u_bp,u_fix,u_sn);
+    [RBF_MAE(i),BP_MAE(i),Fix_MAE(i), RBF_ISE(i),BP_ISE(i),Fix_ISE(i), ...
+     RBF_ITAE(i),BP_ITAE(i),Fix_ITAE(i), ...
+     RBF_Stl(i),BP_Stl(i),Fix_Stl(i), ...
+     RBF_dU(i),BP_dU(i),Fix_dU(i), ...
+     RBF_PeakU(i),BP_PeakU(i),Fix_PeakU(i), ...
+     RBF_Ov(i),BP_Ov(i),Fix_Ov(i), ...
+     RBF_Pk(i),BP_Pk(i),Fix_Pk(i), ...
+     RBF_Ss(i),BP_Ss(i),Fix_Ss(i)] = ...
+        metrics3(y_rbf,e_rbf, y_bp,e_bp, y_fix,e_fix, r_seq, u_rbf,u_bp,u_fix);
 
-    Y_bp{i}=y_bp; Y_fix{i}=y_fix; Y_sn{i}=y_sn; R_seq{i}=r_seq;
+    Y_rbf{i}=y_rbf; Y_bp{i}=y_bp; Y_fix{i}=y_fix; R_seq{i}=r_seq;
 end
 
 %% ==================== 输出对比表 ====================
-fprintf('\n========== 测试结果汇总 ==========\n');
+fprintf('\n========== MAE 三方对比 ==========\n');
+fprintf('%-16s | %-8s %-8s %-8s | %-6s %-6s\n', ...
+    '场景', 'BPRBF', 'BPPID', 'Fix', 'RBF/Fix', 'BP/Fix');
+fprintf('%s\n', repmat('-', 1, 75));
+for i = 1:nS
+    fprintf('%-16s | %8.4f %8.4f %8.4f | %5.2fx %5.2fx\n', ...
+        sc_defs{i,3}, RBF_MAE(i), BP_MAE(i), Fix_MAE(i), ...
+        RBF_MAE(i)/max(Fix_MAE(i),1e-9), BP_MAE(i)/max(Fix_MAE(i),1e-9));
+end
+
+fprintf('\n----- 动态性能（超调 / 峰值误差 / 稳态误差）-----\n');
 fprintf('%-16s | %-8s %-8s %-8s | %-8s %-8s %-8s\n', ...
-    '场景', 'BP_MAE', 'Fix_MAE', 'SN_MAE', 'BP_ISE', 'Fix_ISE', 'SN_ISE');
-fprintf('%s\n', repmat('-', 1, 100));
+    '场景', 'RBF_超调', 'BP_超调', 'Fix_超调', 'RBF_稳态', 'BP_稳态', 'Fix_稳态');
+fprintf('%s\n', repmat('-', 1, 90));
 for i = 1:nS
     fprintf('%-16s | %8.4f %8.4f %8.4f | %8.4f %8.4f %8.4f\n', ...
-        sc_defs{i,3}, BP_MAE(i), Fix_MAE(i), SN_MAE(i), BP_ISE(i), Fix_ISE(i), SN_ISE(i));
+        sc_defs{i,3}, RBF_Ov(i), BP_Ov(i), Fix_Ov(i), RBF_Ss(i), BP_Ss(i), Fix_Ss(i));
 end
 
 fprintf('\n----- 综合 MAE -----\n');
-fprintf('BP-PID=%.4f  固定PID=%.4f  单神经元=%.4f\n', sum(BP_MAE), sum(Fix_MAE), sum(SN_MAE));
-fprintf('BP/Fix=%.2f  BP/SN=%.2f\n', sum(BP_MAE)/max(sum(Fix_MAE),1e-9), sum(BP_MAE)/max(sum(SN_MAE),1e-9));
+fprintf('BPRBF=%.4f  BPPID=%.4f  固定PID=%.4f\n', sum(RBF_MAE), sum(BP_MAE), sum(Fix_MAE));
+fprintf('RBF/Fix=%.2f  BP/Fix=%.2f\n', sum(RBF_MAE)/max(sum(Fix_MAE),1e-9), sum(BP_MAE)/max(sum(Fix_MAE),1e-9));
 fprintf('\n----- 综合 ISE -----\n');
-fprintf('BP-PID=%.4f  固定PID=%.4f  单神经元=%.4f\n', sum(BP_ISE), sum(Fix_ISE), sum(SN_ISE));
+fprintf('BPRBF=%.4f  BPPID=%.4f  固定PID=%.4f\n', sum(RBF_ISE), sum(BP_ISE), sum(Fix_ISE));
 fprintf('\n----- 综合 ITAE -----\n');
-fprintf('BP-PID=%.2f  固定PID=%.2f  单神经元=%.2f\n', sum(BP_ITAE), sum(Fix_ITAE), sum(SN_ITAE));
+fprintf('BPRBF=%.2f  BPPID=%.2f  固定PID=%.2f\n', sum(RBF_ITAE), sum(BP_ITAE), sum(Fix_ITAE));
 
 %% ==================== 绘图 ====================
-figure('Name', 'MAE/ISE/ITAE 指标对比', 'NumberTitle', 'off');
-metrics_names = {'MAE', 'ISE', 'ITAE', 'RMS(Δu)', 'Peak |u|'};
+fig_dir = fullfile(script_dir, 'figures');
+if ~exist(fig_dir, 'dir'), mkdir(fig_dir); end
+
+% --- 指标柱状图（BPRBF vs BPPID） ---
+metrics_data = {RBF_MAE,BP_MAE,'MAE'; RBF_ISE,BP_ISE,'ISE';
+                RBF_ITAE,BP_ITAE,'ITAE'; RBF_dU,BP_dU,'RMS dU';
+                RBF_PeakU,BP_PeakU,'Peak u'};
 for p = 1:5
-    subplot(2,3,p);
-    switch p
-        case 1, bp_d=BP_MAE; fix_d=Fix_MAE; sn_d=SN_MAE;
-        case 2, bp_d=BP_ISE; fix_d=Fix_ISE; sn_d=SN_ISE;
-        case 3, bp_d=BP_ITAE; fix_d=Fix_ITAE; sn_d=SN_ITAE;
-        case 4, bp_d=BP_dU;  fix_d=Fix_dU;  sn_d=SN_dU;
-        case 5, bp_d=BP_PeakU; fix_d=Fix_PeakU; sn_d=SN_PeakU;
-    end
-    bar([bp_d(:),fix_d(:),sn_d(:)]);
-    set(gca,'XTickLabel',sc_defs(:,3));
-    xtickangle(45);
-    if p==1, legend('BP-PID','固定PID','单神经元','Location','best'); end
-    title(metrics_names{p}); grid on;
+    figure('Name', metrics_data{p,3}, 'NumberTitle', 'off');
+    bar([metrics_data{p,1}(:), metrics_data{p,2}(:)]);
+    set(gca,'XTickLabel',sc_defs(:,3)); xtickangle(45);
+    legend('BPRBF','BPPID','Location','best');
+    title(metrics_data{p,3}); grid on;
+    saveas(gcf, fullfile(fig_dir, sprintf('01_%s.png', strrep(metrics_data{p,3},' ','_'))));
 end
 
-fx=[1,min(500,N)];
-for fig=1:3
-    figure('Name',sprintf('时域响应 %d',fig),'NumberTitle','off');
-    s0=(fig-1)*6;
-    for s=1:min(6,nS-s0)
-        subplot(2,3,s); idx=s0+s;
-        r_plot=R_seq{idx}; yb=Y_bp{idx}; yf=Y_fix{idx}; ys=Y_sn{idx};
-        plot(1:N,r_plot,'r',1:N,yf,'k:',1:N,ys,'m-.',1:N,yb,'b--','LineWidth',0.8);
-        xlim(fx); xlabel('步'); ylabel('y');
-        if s==1, legend('目标','固定PID','单神经元','BP-PID','Location','best'); end
-        title(sc_defs{idx,3}); grid on;
-    end
+% --- 动态性能柱状图 ---
+dyn_data = {RBF_Ov,BP_Ov,'超调量'; RBF_Ss,BP_Ss,'稳态误差'};
+for p = 1:2
+    figure('Name', dyn_data{p,3}, 'NumberTitle', 'off');
+    bar([dyn_data{p,1}(:), dyn_data{p,2}(:)]);
+    set(gca,'XTickLabel',sc_defs(:,3)); xtickangle(45);
+    legend('BPRBF','BPPID','Location','best');
+    title(dyn_data{p,3}); grid on;
+    saveas(gcf, fullfile(fig_dir, sprintf('02_%s.png', dyn_data{p,3})));
 end
+
+% --- 时域响应图（BPRBF vs BPPID vs 目标） ---
+for idx = 1:nS
+    figure('Name', sc_defs{idx,3}, 'NumberTitle', 'off');
+    r_plot = R_seq{idx}; yr = Y_rbf{idx}; yb = Y_bp{idx};
+    plot(1:N, r_plot, 'r', 1:N, yb, 'g', 1:N, yr, 'b--', 'LineWidth', 0.8);
+    xlim([1, N]); xlabel('步'); ylabel('y');
+    legend('目标','BPPID','BPRBF','Location','best');
+    ttl = sc_defs{idx, 3};
+    if strcmp(sc_defs{idx, 1}, 'plant1')
+        ttl = sprintf('%s\nPlant1: y(k)=a/(1+y^2)*y(k-1)+u(k-1)', ttl);
+    else
+        ttl = sprintf('%s\nPlant2: y(k)=1.7y(k-1)-0.72y(k-2)+0.03u(k-1)', ttl);
+    end
+    title(ttl, 'FontSize', 8); grid on;
+    saveas(gcf, fullfile(fig_dir, sprintf('03_timeseries_%02d.png', idx)));
+end
+
+fprintf('图片已保存至 %s（共 %d 张）\n', fig_dir, 5+2+nS);
 
 %% ==================== 保存 ====================
 save(fullfile(script_dir, 'test_results.mat'), ...
-    'sc_defs','N','BP_MAE','Fix_MAE','SN_MAE','BP_ISE','Fix_ISE','SN_ISE', ...
-    'BP_ITAE','Fix_ITAE','SN_ITAE','BP_Stl','Fix_Stl','SN_Stl', ...
-    'BP_dU','Fix_dU','SN_dU','BP_PeakU','Fix_PeakU','SN_PeakU');
+    'sc_defs','N', ...
+    'RBF_MAE','BP_MAE','Fix_MAE','RBF_ISE','BP_ISE','Fix_ISE', ...
+    'RBF_ITAE','BP_ITAE','Fix_ITAE','RBF_Stl','BP_Stl','Fix_Stl', ...
+    'RBF_dU','BP_dU','Fix_dU','RBF_PeakU','BP_PeakU','Fix_PeakU', ...
+    'RBF_Ov','BP_Ov','Fix_Ov','RBF_Pk','BP_Pk','Fix_Pk','RBF_Ss','BP_Ss','Fix_Ss');
 fprintf('\n结果已保存至 test_results.mat\n');
 
-%% ==================== 扩展指标函数（三控制器） ====================
+%% ==================== 三方指标函数 ====================
 
-function [bp_mae,fix_mae,sn_mae, bp_ise,fix_ise,sn_ise, ...
-          bp_itae,fix_itae,sn_itae, bp_stl,fix_stl,sn_stl, ...
-          bp_du,fix_du,sn_du, bp_peak,fix_peak,sn_peak] = ...
-        metrics3(y_bp, e_bp, r_seq, y_fix, e_fix, y_sn, e_sn, u_bp, u_fix, u_sn)
-    N = length(e_bp);
+function [rbf_mae,bp_mae,fix_mae, rbf_ise,bp_ise,fix_ise, ...
+          rbf_itae,bp_itae,fix_itae, rbf_stl,bp_stl,fix_stl, ...
+          rbf_du,bp_du,fix_du, rbf_peak,bp_peak,fix_peak, ...
+          rbf_ov,bp_ov,fix_ov, rbf_pk,bp_pk,fix_pk, rbf_ss,bp_ss,fix_ss] = ...
+        metrics3(y_rbf, e_rbf, y_bp, e_bp, y_fix, e_fix, r_seq, u_rbf, u_bp, u_fix)
+    N = length(e_rbf);
 
-    % MAE
-    bp_mae=mean(abs(e_bp)); fix_mae=mean(abs(e_fix)); sn_mae=mean(abs(e_sn));
+    rbf_mae=mean(abs(e_rbf)); bp_mae=mean(abs(e_bp)); fix_mae=mean(abs(e_fix));
+    rbf_ise=sum(e_rbf.^2)/N; bp_ise=sum(e_bp.^2)/N; fix_ise=sum(e_fix.^2)/N;
 
-    % ISE (积分平方误差)
-    bp_ise=sum(e_bp.^2)/N; fix_ise=sum(e_fix.^2)/N; sn_ise=sum(e_sn.^2)/N;
-
-    % ITAE (时间加权)
     k_vec=1:N;
-    bp_itae=sum(k_vec.*abs(e_bp)); fix_itae=sum(k_vec.*abs(e_fix)); sn_itae=sum(k_vec.*abs(e_sn));
+    rbf_itae=sum(k_vec.*abs(e_rbf)); bp_itae=sum(k_vec.*abs(e_bp)); fix_itae=sum(k_vec.*abs(e_fix));
 
-    % 调节时间
     band=0.05;
-    bp_last=find(abs(y_bp-r_seq)>band.*abs(r_seq+1e-6),1,'last');
-    fix_last=find(abs(y_fix-r_seq)>band.*abs(r_seq+1e-6),1,'last');
-    sn_last=find(abs(y_sn-r_seq)>band.*abs(r_seq+1e-6),1,'last');
-    bp_stl=bp_last; if isempty(bp_stl),bp_stl=0;end
-    fix_stl=fix_last; if isempty(fix_stl),fix_stl=0;end
-    sn_stl=sn_last; if isempty(sn_stl),sn_stl=0;end
+    rbfl=find(abs(y_rbf-r_seq)>band.*abs(r_seq+1e-6),1,'last');
+    bpl=find(abs(y_bp-r_seq)>band.*abs(r_seq+1e-6),1,'last');
+    fixl=find(abs(y_fix-r_seq)>band.*abs(r_seq+1e-6),1,'last');
+    rbf_stl=rbfl; if isempty(rbf_stl),rbf_stl=0;end
+    bp_stl=bpl; if isempty(bp_stl),bp_stl=0;end
+    fix_stl=fixl; if isempty(fix_stl),fix_stl=0;end
 
-    % RMS(Δu)
-    bp_du=sqrt(mean(diff(u_bp).^2));
-    fix_du=sqrt(mean(diff(u_fix).^2));
-    sn_du=sqrt(mean(diff(u_sn).^2));
+    rbf_du=sqrt(mean(diff(u_rbf).^2)); bp_du=sqrt(mean(diff(u_bp).^2)); fix_du=sqrt(mean(diff(u_fix).^2));
+    rbf_peak=max(abs(u_rbf)); bp_peak=max(abs(u_bp)); fix_peak=max(abs(u_fix));
+    rbf_ov=max(0, max(y_rbf - r_seq)); bp_ov=max(0, max(y_bp - r_seq)); fix_ov=max(0, max(y_fix - r_seq));
+    rbf_pk=max(abs(e_rbf)); bp_pk=max(abs(e_bp)); fix_pk=max(abs(e_fix));
 
-    % 峰值控制量
-    bp_peak=max(abs(u_bp)); fix_peak=max(abs(u_fix)); sn_peak=max(abs(u_sn));
+    ss_N = min(200, N);
+    rbf_ss=mean(abs(e_rbf(end-ss_N+1:end)));
+    bp_ss=mean(abs(e_bp(end-ss_N+1:end)));
+    fix_ss=mean(abs(e_fix(end-ss_N+1:end)));
 end
 
-%% ==================== BP-PID 仿真（含场景参数） ====================
+%% ==================== BPRBF 仿真（RBF 解析 Jacobian） ====================
 
-function [y, error, u] = sim_bp_pid(N, scenario, plant_id, w1, w2)
-    IN = 4;  H = 5;  Out = 3;
+function [y, error, u] = sim_bp_rbf(N, scenario, plant_id, w1, w2)
+    IN = 5;  H = size(w1,1);  Out = size(w2,1);
     switch plant_id
         case 'plant1'
-            rate = 0.005;  Kp_max = 2.0;  Ki_max = 0.5;  Kd_max = 1.0;
+            rate = 0.005; Kp_max = 2.0;  Ki_max = 0.2;  Kd_max = 0.0;
+            jac_cap = 1.0;  du_max = 1.0;
+            ff_gain = 0.0;  beta_sp = 1.00;
         case 'plant2'
-            rate = 0.003;  Kp_max = 10.0;  Ki_max = 1.0;  Kd_max = 25.0;
-        case 'plant3'
-            rate = 0.003;  Kp_max = 3.0;  Ki_max = 0.5;  Kd_max = 3.0;
+            rate = 0.003;  du_max = 0.5;
+            jac_cap = 0.3;  ff_gain = 0.667;  beta_sp = 0.85;
+            rate_sine = 0.008;
+            Kp_base = 1.0115;  Kp_delta = 11.0;
+            Ki_base = 0.1089;  Ki_delta = 2.0;
+            Kd_base = 0;       Kd_delta = 0;
+            Kp_max = Kp_delta;  Ki_max = Ki_delta;  Kd_max = Kd_delta;
     end
     rate2 = 0.01;
     scale_vec = [Kp_max, Ki_max, Kd_max];
@@ -197,188 +237,283 @@ function [y, error, u] = sim_bp_pid(N, scenario, plant_id, w1, w2)
     w1_1 = w1;  w1_2 = w1;
     w2_1 = w2;  w2_2 = w2;
 
-    y_1 = 0;  y_2 = 0;  u_1 = 0;  error_1 = 0;  error_2 = 0;
+    y_1 = 0;  y_2 = 0;  u_1 = 0;  u_2 = 0;  r_1 = 0;  error_1 = 0;  error_2 = 0;
+    e_sp_1 = 0;  e_sp_2 = 0;
+    st_has = false;  st_ep = zeros(Out,1);  st_O2 = zeros(1,H);
+    st_dO3 = zeros(1,Out);  st_dO2 = zeros(1,H);  st_I1 = zeros(1,IN);
     y = zeros(1, N);  error = zeros(1, N);  u = zeros(1, N);
     y_true = 0;
 
-    rbf_identifier(0, 0, true);
+    clear rbf_identifier;  % 每个场景强制重置 RBF 持久状态
+    rbf_identifier(0, 0, plant_id);
 
     rng(42);
 
     for k = 1:N
         r_k = get_target(k, scenario);
         y_fb = get_feedback(y_true, k, scenario);
-
         error(k) = r_k - y_fb;
 
-        % 前向传播
-        I1 = [r_k, y_fb, error(k), 1];
+        I1 = [r_k, y_fb, error(k), r_k - r_1, 1];
         I2 = I1 * w1';
         O2 = tanh(I2);
         I3 = w2 * O2';
         I3_t = I3';
         O3 = zeros(1, Out);
         for l = 1:Out
-            if I3_t(l) > 0
-                O3(l) = I3_t(l);
-            else
-                O3(l) = 0.2 * I3_t(l);
-            end
+            if I3_t(l) > 0, O3(l) = I3_t(l); else, O3(l) = 0.2 * I3_t(l); end
         end
 
-        kp = Kp_max * O3(1);  ki = Ki_max * O3(2);  kd = Kd_max * O3(3);
+        if strcmp(plant_id, 'plant2')
+            kp = Kp_base + Kp_delta * O3(1);
+            ki = Ki_base + Ki_delta * O3(2);
+            kd = Kd_base + Kd_delta * O3(3);
+        else
+            kp = Kp_max * O3(1);  ki = Ki_max * O3(2);  kd = Kd_max * O3(3);
+        end
         Kpid = [kp, ki, kd];
-
-        e_pid = [error(k) - error_1;
-                 error(k);
-                 error(k) - 2*error_1 + error_2];
+        e_sp_k = beta_sp * r_k - y_fb;
+        e_pid = [e_sp_k - e_sp_1; error(k); e_sp_k - 2*e_sp_1 + e_sp_2];
         delta_u = Kpid * e_pid;
-        delta_u = max(-0.5, min(0.5, delta_u));
+        dr = r_k - r_1;
+        if abs(dr) <= 0.1, delta_u = delta_u + ff_gain * dr; end
+        delta_u = max(-du_max, min(du_max, delta_u));
         u_k = u_1 + delta_u;
         u(k) = u_k;
 
-        % 被控对象
         a_override = get_ak(k, scenario);
         y_true = plant_dynamics(plant_id, y_1, y_2, u_k, u_1, k, a_override);
         y(k) = y_true;
         error(k) = r_k - y_true;
 
-        % 反向传播（误差死区）
-        dead_zone = 0.01;
-        if abs(error(k)) >= dead_zone
-        dO3 = zeros(1, Out);
-        for j = 1:Out
-            if O3(j) > 0
-                dO3(j) = 1;
-            else
-                dO3(j) = 0.2;
-            end
-        end
-        dydu_fd = (y_true - y_1) / (u_k - u_1 + 0.0001);
-        [dydu_rbf, ~] = rbf_identifier(u_1, y_true, false);
-        if k <= 500
-            dydu = dydu_fd;
+        [dydu, ~] = rbf_identifier(u_1, y_true, false);
+        du_sys = max(-jac_cap, min(jac_cap, dydu));
+
+        dead_zone = 0.002;
+        if strcmp(plant_id, 'plant1') && strcmp(scenario, 'ramp')
+            skip_bp = true;
         else
-            dydu = dydu_rbf;
+            skip_bp = false;
         end
-        du_sys = max(-1, min(1, dydu));
-
-        delta3 = zeros(1, Out);
-        for l = 1:Out
-            delta3(l) = error(k) * du_sys * scale_vec(l) * e_pid(l) * dO3(l);
-        end
-
-        d_w2 = zeros(Out, H);
-        for l = 1:Out
-            for i = 1:H
-                d_w2(l, i) = rate * delta3(l) * O2(i);
+        if st_has && ~skip_bp && abs(error(k)) >= dead_zone
+            delta3 = zeros(1, Out);
+            e_grad = max(-0.5, min(0.5, error(k)));
+            for l = 1:Out
+                delta3(l) = e_grad * du_sys * scale_vec(l) * st_ep(l) * st_dO3(l);
             end
+
+            d_w2 = zeros(Out, H);
+            rate_eff = rate;
+            if strcmp(plant_id, 'plant2')
+                if any(strcmp(scenario, {'sine_low','sine_high'}))
+                    rate_eff = rate_sine * min(3, 1 + abs(error(k)));
+                else
+                    rate_eff = rate * min(3, 1 + abs(error(k)));
+                end
+            end
+            for l = 1:Out
+                for i = 1:H
+                    d_w2(l, i) = rate_eff * delta3(l) * st_O2(i);
+                end
+            end
+            w2 = w2_1 + d_w2 + rate2 * 2 * (w2_1 - w2_2);
+
+            a_back = delta3 * w2_1;
+            delta2 = st_dO2 .* a_back;
+            d_w1 = rate_eff * delta2' * st_I1;
+            w1 = w1_1 + d_w1 + rate2 * (w1_1 - w1_2);
+
+            w2_2 = w2_1;  w2_1 = w2;
+            w1_2 = w1_1;  w1_1 = w1;
         end
-        w2 = w2_1 + d_w2 + rate2 * 2 * (w2_1 - w2_2);
 
-        dO2 = 1 - tanh(I2).^2;
-        a_back = delta3 * w2;
-        delta2 = dO2 .* a_back;
-        d_w1 = rate * delta2' * I1;
-        w1 = w1_1 + d_w1 + rate2 * (w1_1 - w1_2);
-        end  % 误差死区
+        st_has = true;  st_ep = e_pid;  st_O2 = O2;  st_I1 = I1;
+        dO3_t = zeros(1, Out);
+        for j = 1:Out
+            if O3(j) > 0, dO3_t(j) = 1; else, dO3_t(j) = 0.2; end
+        end
+        st_dO3 = dO3_t;
+        st_dO2 = 1 - tanh(I2).^2;
 
-        % 状态缓存
-        u_1 = u_k;  y_2 = y_1;  y_1 = y_true;
-        w2_2 = w2_1;  w2_1 = w2;
-        w1_2 = w1_1;  w1_1 = w1;
-        error_2 = error_1;
-        error_1 = error(k);
+        u_2 = u_1;  u_1 = u_k;
+        y_2 = y_1;  y_1 = y_true;
+        r_1 = r_k;
+        error_2 = error_1;  error_1 = error(k);
+        e_sp_2 = e_sp_1;  e_sp_1 = e_sp_k;
     end
 end
 
-%% ==================== 单神经元自适应 PID 仿真 ====================
+%% ==================== BPPID 仿真（FD Jacobian，对齐 BP 文件夹） ====================
 
-function [y, error, u] = sim_sn_pid(N, scenario, plant_id)
-    K_neuron = 0.8;    % 神经元增益
-    eta = 0.05;         % Hebbian 学习率
-    w = [0.3, 0.3, 0.3];  % 初始权重
+function [y, error, u] = sim_bp_fd(N, scenario, plant_id, w1, w2)
+    IN = 5;  H = size(w1,1);  Out = size(w2,1);
+    switch plant_id
+        case 'plant1'
+            rate = 0.005; Kp_max = 2.0;  Ki_max = 0.2;  Kd_max = 0.0;
+            jac_cap = 1.0;  du_max = 1.0;
+            ff_gain = 0.0;  beta_sp = 1.00;
+        case 'plant2'
+            rate = 0.003;  du_max = 0.5;
+            jac_cap = 0.3;  ff_gain = 0.667;  beta_sp = 0.85;
+            rate_sine = 0.008;
+            Kp_base = 1.0115;  Kp_delta = 11.0;
+            Ki_base = 0.1089;  Ki_delta = 2.0;
+            Kd_base = 0;       Kd_delta = 0;
+            Kp_max = Kp_delta;  Ki_max = Ki_delta;  Kd_max = Kd_delta;
+    end
+    rate2 = 0.01;
+    scale_vec = [Kp_max, Ki_max, Kd_max];
 
-    y_1 = 0;  y_2 = 0;  u_1 = 0;  error_1 = 0;  error_2 = 0;
+    w1_1 = w1;  w1_2 = w1;
+    w2_1 = w2;  w2_2 = w2;
+
+    y_1 = 0;  y_2 = 0;  u_1 = 0;  u_2 = 0;  r_1 = 0;  error_1 = 0;  error_2 = 0;
+    e_sp_1 = 0;  e_sp_2 = 0;
+    st_has = false;  st_ep = zeros(Out,1);  st_O2 = zeros(1,H);
+    st_dO3 = zeros(1,Out);  st_dO2 = zeros(1,H);  st_I1 = zeros(1,IN);
     y = zeros(1, N);  error = zeros(1, N);  u = zeros(1, N);
     y_true = 0;
-    u_buf = zeros(1, 8);
 
     rng(42);
 
     for k = 1:N
         r_k = get_target(k, scenario);
         y_fb = get_feedback(y_true, k, scenario);
+        error(k) = r_k - y_fb;
 
-        e_cur = r_k - y_fb;
-        error(k) = e_cur;
+        I1 = [r_k, y_fb, error(k), r_k - r_1, 1];
+        I2 = I1 * w1';
+        O2 = tanh(I2);
+        I3 = w2 * O2';
+        I3_t = I3';
+        O3 = zeros(1, Out);
+        for l = 1:Out
+            if I3_t(l) > 0, O3(l) = I3_t(l); else, O3(l) = 0.2 * I3_t(l); end
+        end
 
-        % 单神经元输入（同增量PID三项）
-        x1 = e_cur;                              % P: e(k)
-        x2 = e_cur - error_1;                    % I: Δe(k)
-        x3 = e_cur - 2*error_1 + error_2;        % D: Δ²e(k)
-
-        % 权值归一化
-        w_sum = abs(w(1)) + abs(w(2)) + abs(w(3)) + 1e-6;
-        w1_n = w(1) / w_sum;
-        w2_n = w(2) / w_sum;
-        w3_n = w(3) / w_sum;
-
-        % 控制量（增量式）
-        delta_u = K_neuron * (w1_n*x1 + w2_n*x2 + w3_n*x3);
-        delta_u = max(-0.5, min(0.5, delta_u));
+        if strcmp(plant_id, 'plant2')
+            kp = Kp_base + Kp_delta * O3(1);
+            ki = Ki_base + Ki_delta * O3(2);
+            kd = Kd_base + Kd_delta * O3(3);
+        else
+            kp = Kp_max * O3(1);  ki = Ki_max * O3(2);  kd = Kd_max * O3(3);
+        end
+        Kpid = [kp, ki, kd];
+        e_sp_k = beta_sp * r_k - y_fb;
+        e_pid = [e_sp_k - e_sp_1; error(k); e_sp_k - 2*e_sp_1 + e_sp_2];
+        delta_u = Kpid * e_pid;
+        dr = r_k - r_1;
+        if abs(dr) <= 0.1, delta_u = delta_u + ff_gain * dr; end
+        delta_u = max(-du_max, min(du_max, delta_u));
         u_k = u_1 + delta_u;
         u(k) = u_k;
 
-        % 被控对象
         a_override = get_ak(k, scenario);
         y_true = plant_dynamics(plant_id, y_1, y_2, u_k, u_1, k, a_override);
         y(k) = y_true;
+        error(k) = r_k - y_true;
 
-        % 监督 Hebbian 权值更新
-        w(1) = w(1) + eta * e_cur * x1;
-        w(2) = w(2) + eta * e_cur * x2;
-        w(3) = w(3) + eta * e_cur * x3;
+        % 有限差分 Jacobian
+        dead_zone = 0.002;
+        if strcmp(plant_id, 'plant1') && strcmp(scenario, 'ramp')
+            skip_bp = true;
+        else
+            skip_bp = false;
+        end
+        if st_has && ~skip_bp && abs(error(k)) >= dead_zone
+            dydu = (y_true - y_1) / (u_1 - u_2 + 0.0001);
+            du_sys = max(-jac_cap, min(jac_cap, dydu));
 
-        % 状态缓存
-        u_1 = u_k;  y_2 = y_1;  y_1 = y_true;
-        error_2 = error_1;
-        error_1 = e_cur;
+            delta3 = zeros(1, Out);
+            e_grad = max(-0.5, min(0.5, error(k)));
+            for l = 1:Out
+                delta3(l) = e_grad * du_sys * scale_vec(l) * st_ep(l) * st_dO3(l);
+            end
+
+            d_w2 = zeros(Out, H);
+            rate_eff = rate;
+            if strcmp(plant_id, 'plant2')
+                if any(strcmp(scenario, {'sine_low','sine_high'}))
+                    rate_eff = rate_sine * min(3, 1 + abs(error(k)));
+                else
+                    rate_eff = rate * min(3, 1 + abs(error(k)));
+                end
+            end
+            for l = 1:Out
+                for i = 1:H
+                    d_w2(l, i) = rate_eff * delta3(l) * st_O2(i);
+                end
+            end
+            w2 = w2_1 + d_w2 + rate2 * 2 * (w2_1 - w2_2);
+
+            a_back = delta3 * w2_1;
+            delta2 = st_dO2 .* a_back;
+            d_w1 = rate_eff * delta2' * st_I1;
+            w1 = w1_1 + d_w1 + rate2 * (w1_1 - w1_2);
+
+            w2_2 = w2_1;  w2_1 = w2;
+            w1_2 = w1_1;  w1_1 = w1;
+        end
+
+        st_has = true;  st_ep = e_pid;  st_O2 = O2;  st_I1 = I1;
+        dO3_t = zeros(1, Out);
+        for j = 1:Out
+            if O3(j) > 0, dO3_t(j) = 1; else, dO3_t(j) = 0.2; end
+        end
+        st_dO3 = dO3_t;
+        st_dO2 = 1 - tanh(I2).^2;
+
+        u_2 = u_1;  u_1 = u_k;
+        y_2 = y_1;  y_1 = y_true;
+        r_1 = r_k;
+        error_2 = error_1;  error_1 = error(k);
+        e_sp_2 = e_sp_1;  e_sp_1 = e_sp_k;
     end
 end
 
 %% ==================== 固定 PID 仿真 ====================
 
 function [y, error, u] = sim_fix_pid(N, scenario, plant_id, Kp, Ki, Kd)
-    y_1 = 0;  y_2 = 0;  u_1 = 0;  ei = 0;  last_e = 0;
+    is_sine = any(strcmp(scenario, {'sine_low','sine_high'}));
+    switch plant_id
+        case 'plant1'
+            du_max = 1.0;  beta_sp = 1.00;
+            if is_sine, ff_gain = 0.5; else, ff_gain = 0.0; end
+        case 'plant2'
+            du_max = 0.5;  ff_gain = 0.667;  beta_sp = 0.85;
+    end
+    % 正弦热启动：消除冷启动瞬态（Plant1 + Plant2）
+    if is_sine
+        r_start = 1 + 0.5 * sin(2*pi*0.005);
+        y_1 = r_start;  y_2 = r_start;  y_true = r_start;
+    else
+        y_1 = 0;  y_2 = 0;  y_true = 0;
+    end
+    u_1 = 0;  r_1 = 0;
+    e_1 = 0;  e_2 = 0;  e_sp_1 = 0;  e_sp_2 = 0;
     y = zeros(1, N);  error = zeros(1, N);  u = zeros(1, N);
-    y_true = 0;
-    u_buf = zeros(1, 8);
 
     rng(42);
 
     for k = 1:N
         r_k = get_target(k, scenario);
         y_fb = get_feedback(y_true, k, scenario);
-
         e_cur = r_k - y_fb;
-        error(k) = e_cur;
-
-        ei = ei + e_cur;
-        ei_clamped = max(-3, min(3, ei));
-        ed = e_cur - last_e;
-        delta_u = Kp * e_cur + Ki * ei_clamped + Kd * ed - u_1;
-        delta_u = max(-0.5, min(0.5, delta_u));
+        e_sp_k = beta_sp * r_k - y_fb;
+        delta_u = Kp*(e_sp_k - e_sp_1) + Ki*e_cur + Kd*(e_sp_k - 2*e_sp_1 + e_sp_2);
+        dr = r_k - r_1;
+        if abs(dr) <= 0.1, delta_u = delta_u + ff_gain * dr; end
+        delta_u = max(-du_max, min(du_max, delta_u));
         u_k = u_1 + delta_u;
         u(k) = u_k;
-
         a_override = get_ak(k, scenario);
         y_true = plant_dynamics(plant_id, y_1, y_2, u_k, u_1, k, a_override);
         y(k) = y_true;
-
-        last_e = e_cur;
+        error(k) = r_k - y_true;
+        e_2 = e_1;  e_1 = e_cur;
+        e_sp_2 = e_sp_1;  e_sp_1 = e_sp_k;
         y_2 = y_1;  y_1 = y_true;
-        u_1 = u_k;
+        u_1 = u_k;  r_1 = r_k;
     end
 end
 
@@ -405,13 +540,13 @@ function r = get_target(k, scenario)
         case 'square'
             if mod(floor((k-1)/100), 2) == 0, r = 1; else, r = 2; end
         case 'sine_low'
-            r = 1 + 0.5 * sin(2*pi*0.005*k);     % 低频正弦, 周期200步
+            r = 1 + 0.5 * sin(2*pi*0.005*k);
         case 'sine_high'
-            r = 1 + 0.5 * sin(2*pi*0.02*k);       % 高频正弦, 周期50步
+            r = 1 + 0.5 * sin(2*pi*0.02*k);
         case 'ramp'
-            r = min(1, k / 500);                   % 0→1 斜坡
+            r = min(1, k / 500);
         case 'composite'
-            r = 1 + 0.6*sin(2*pi*0.005*k) + 0.3*sin(2*pi*0.03*k);  % 多频率复合（DC=1）
+            r = 1 + 0.6*sin(2*pi*0.005*k) + 0.3*sin(2*pi*0.03*k);
         case 'random_step'
             if isempty(rand_seq) || mod(k, 200) == 1
                 rng(k); rand_amp = 0.5 + 1.5*rand();

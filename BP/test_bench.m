@@ -363,8 +363,8 @@ function [y, error, u] = sim_fix_pid(N, scenario, plant_id, Kp, Ki, Kd)
         case 'plant2'
             du_max = 0.5;  ff_gain = 0.667;  beta_sp = 0.85;
     end
-    % 正弦热启动：消除冷启动瞬态
-    if is_sine && strcmp(plant_id, 'plant1')
+    % 正弦热启动：消除冷启动瞬态（Plant1 + Plant2）
+    if is_sine
         r_start = 1 + 0.5 * sin(2*pi*0.005);
         y_1 = r_start;  y_2 = r_start;  y_true = r_start;
     else
