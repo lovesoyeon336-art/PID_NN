@@ -5,18 +5,14 @@ clear; close all;
 
 tuned1 = load(fullfile(script_dir, 'pid_tuned_params.mat'));
 tuned2 = load(fullfile(script_dir, 'pid_tuned_params_plant2.mat'));
-tuned3 = load(fullfile(script_dir, 'pid_tuned_params_plant3.mat'));
 
 sn1 = load(fullfile(script_dir, 'sn_tuned_params_plant1.mat'));
 sn2 = load(fullfile(script_dir, 'sn_tuned_params_plant2.mat'));
-sn3 = load(fullfile(script_dir, 'sn_tuned_params_plant3.mat'));
 
 fprintf('对象1: PID Kp=%.2f Ki=%.2f Kd=%.2f  |  SN K=%.2f eta=%.2f\n', ...
     tuned1.Kp_opt, tuned1.Ki_opt, tuned1.Kd_opt, sn1.K_opt, sn1.eta_opt);
 fprintf('对象2: PID Kp=%.2f Ki=%.2f Kd=%.2f  |  SN K=%.2f eta=%.2f\n', ...
     tuned2.Kp_opt, tuned2.Ki_opt, tuned2.Kd_opt, sn2.K_opt, sn2.eta_opt);
-fprintf('对象3: PID Kp=%.2f Ki=%.2f Kd=%.2f  |  SN K=%.2f eta=%.2f\n', ...
-    tuned3.Kp_opt, tuned3.Ki_opt, tuned3.Kd_opt, sn3.K_opt, sn3.eta_opt);
 
 %% ==================== 16 场景测试矩阵 ====================
 N = 2000;
@@ -27,17 +23,12 @@ sc_defs = {
     'plant1', 'sine_high',   '3.正弦高频';
     'plant1', 'ramp',        '4.斜坡跟踪';
     'plant1', 'composite',   '5.复合信号';
-    'plant1', 'random_step', '6.随机阶跃';
-    'plant1', 'perturb',     '7.参数摄动';
-    'plant1', 'disturb',     '8.输出扰动';
-    'plant1', 'noise',       '9.量测噪声';
-    'plant1', 'drift',       '10.对象永久变异';
-    'plant1', 'combo',       '11.复合扰动+噪声';
-    'plant2', 'step',        '12.对象2阶跃';
-    'plant2', 'sine_low',    '13.对象2正弦';
-    'plant2', 'square',      '14.对象2方波';
-    'plant3', 'step',        '15.对象3阶跃';
-    'plant3', 'sine_low',    '16.对象3正弦';
+    'plant1', 'perturb',     '6.参数摄动';
+    'plant1', 'disturb',     '7.输出扰动';
+    'plant1', 'noise',       '8.量测噪声';
+    'plant2', 'step',        '9.对象2阶跃';
+    'plant2', 'sine_low',    '10.对象2正弦';
+    'plant2', 'square',      '11.对象2方波';
 };
 nS = size(sc_defs, 1);
 
@@ -59,9 +50,6 @@ for i = 1:nS
         case 'plant2'
             KpF=tuned2.Kp_opt; KiF=tuned2.Ki_opt; KdF=tuned2.Kd_opt;
             Ksn=sn2.K_opt; eta_sn=sn2.eta_opt;
-        case 'plant3'
-            KpF=tuned3.Kp_opt; KiF=tuned3.Ki_opt; KdF=tuned3.Kd_opt;
-            Ksn=sn3.K_opt; eta_sn=sn3.eta_opt;
     end
 
     [y_sn, e_sn, u_sn] = sim_sn_pid(N, sc, pid, Ksn, eta_sn);

@@ -1,3 +1,71 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Behavioral Guidelines
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+### 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them — don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+### 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+### 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it — don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+### 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
 ## Project Overview
 
 This workspace targets a single folder: `BPNN_RBFNN/` — a **BP + RBF combined neural network adaptive PID controller** in MATLAB/Simulink. Uses **MATLAB R2022a** with Simulink.
@@ -21,7 +89,7 @@ The working directory is `BPNN_RBFNN/`, containing:
 | `BP_PID_Controller.m` | BP neural network PID controller (MATLAB Function block). 3-5-3 structure, Xavier init, tanh hidden / sigmoid output, plain SGD, gradient clipping, incremental PID. |
 | `RBF_Identifier_claude.m` | RBF neural network online identifier (MATLAB Function block). 4-8-1 structure with momentum on all three parameter groups (W, C, Sigma). Provides Jacobian ∂y/∂u for BP backpropagation. |
 | `BP_RBFNN.slx` | Simulink model wiring the two blocks together with plant, reference input, scopes, and To Workspace blocks. |
-| `plot_result.m` | Standalone script. Runs `sim('BP_RBFNN', 'StopTime', '7000')` then plots 5 figures (PID params, control u, tracking, Jacobian, y_hat) and saves to `figures/`. |
+| `plot_result.m` | Standalone script. Runs `sim('BP_RBFNN', 'StopTime', '1000')` then plots 5 figures (PID params, control u, tracking, Jacobian, y_hat) and saves to `figures/`. |
 
 ## Common Workflow
 
@@ -46,7 +114,7 @@ out.Kp, out.Ki, out.Kd  % PID gains
 1. **One change at a time.** Only make a single algorithm modification per iteration. Do not batch multiple changes together.
 
 2. **Simulate and plot after every change.** After each modification:
-   - Run `sim('BP_RBFNN', 'StopTime', '7000')` to simulate 7000s
+   - Run `sim('BP_RBFNN', 'StopTime', '1000')` to simulate 1000s
    - Call `plot_results()` (or the equivalent plotting code) to generate diagnostic figures
    - Save all figures to `BPNN_RBFNN/figures/` for visual review
    - Each run must overwrite the previous figures (fixed filenames: `fig1_pid_params.png`, `fig2_control_u.png`, etc.) so the folder always reflects the latest simulation
@@ -61,7 +129,7 @@ out.Kp, out.Ki, out.Kd  % PID gains
    chart = rt.find('-isa', 'Stateflow.EMChart', 'Path', 'BP_RBFNN/MATLAB Function1');
    chart.Script = fileread('BP_PID_Controller.m');
    save_system('BP_RBFNN');
-   out = sim('BP_RBFNN', 'StopTime', '7000');
+   out = sim('BP_RBFNN', 'StopTime', '1000');
    plot_results();
    bdclose('all');
    ```
@@ -73,12 +141,12 @@ out.Kp, out.Ki, out.Kd  % PID gains
    chart = rt.find('-isa', 'Stateflow.EMChart', 'Path', 'BP_RBFNN/MATLAB Function2');
    chart.Script = fileread('RBF_Identifier_claude.m');
    save_system('BP_RBFNN');
-   out = sim('BP_RBFNN', 'StopTime', '7000');
+   out = sim('BP_RBFNN', 'StopTime', '1000');
    plot_results();
    bdclose('all');
    ```
 
-4. **Fully autonomous execution.** Do not stop to ask for plan approval or simulation consent. After analyzing the previous simulation result, pick the single best algorithmic improvement, implement it in the `.m` file, update the Simulink block, run the simulation, analyze results, and decide the next step — all without pausing. Only stop when: (a) results clearly beat the all-time best by a wide margin and suggest the optimization is converging, or (b) a fundamental architectural change is needed that cannot be resolved by incremental algorithm tweaks.
+4. **Consent model: plan approval = simulation consent.** Ask the user for permission before creating new files (`.m`, `.slx`, `.mat`, etc.) or when proposing an algorithm change plan. Once the user approves the plan, proceed with code change + block update + simulation + analysis without re-asking for each step.
 
 5. **Each simulation .mat data must overwrite the previous.** The file `simulation_output.mat` uses a fixed filename — every new simulation replaces the old data. The `figures/` directory likewise only holds the latest run's PNG files.
 
@@ -88,12 +156,6 @@ out.Kp, out.Ki, out.Kd  % PID gains
    - Tracking performance (max overshoot, steady-state MAE, RMS error)
    - RBF ident quality (RMS ident error, dy/du statistics)
    - Present the analysis together with algorithmic interpretation — what changed, what broke, what improved.
-
-7. **Auto-snapshot to GitHub ONLY when results beat the all-time best.** After each numerical analysis:
-   - Load the best result so far: find the largest `BP_RBFN/` folder, load its `simulation_output.mat`, and extract its RMS error / saturation rate / steady-state MAE
-   - Compare: **RMS error** (primary), **saturation rate** (secondary), **steady-state MAE** (tertiary)
-   - **Only if the current run is strictly better:** create `BP_RBFN/` (N = previous + 1), copy all `.m` files, `.slx` model, `plot_result.m`, `simulation_output.mat`, `figures/`, and root config files into it, then commit and push with a message describing the improvement
-   - **If NOT better:** do nothing — no snapshot, no commit, no push. Simply report the comparison and wait for the next change
 
 ## Model Architecture (BPNN_RBFNN)
 

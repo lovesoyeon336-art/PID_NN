@@ -1,17 +1,16 @@
 clear; close all;
 
-%% ==================== 加载整定参数和预训练权重 ====================
+%% ==================== 路径设置（共享文件统一从 BP 文件夹引用） ====================
 [script_dir, ~, ~] = fileparts(mfilename('fullpath'));
-
-tuned1 = load(fullfile(script_dir, 'pid_tuned_params.mat'));
-tuned2 = load(fullfile(script_dir, 'pid_tuned_params_plant2.mat'));
-
-% BPRBF 预训练权重（RBF Jacobian）
-pretrain_rbf1 = load(fullfile(script_dir, 'bp_pretrained_weights.mat'));
-pretrain_rbf2 = load(fullfile(script_dir, 'bp_pretrained_weights_plant2.mat'));
-
-% BPPID 预训练权重（FD Jacobian，来自 BP 文件夹）
 bp_dir = fullfile(script_dir, '..', 'BP');
+addpath(bp_dir);  % plant_dynamics.m
+
+%% ==================== 加载整定参数和预训练权重 ====================
+
+tuned1 = load(fullfile(bp_dir, 'pid_tuned_params.mat'));
+tuned2 = load(fullfile(bp_dir, 'pid_tuned_params_plant2.mat'));
+
+% 两个控制器均使用 BP 预训练权重（隔离 Jacobian 来源为唯一变量）
 pretrain_bp1 = load(fullfile(bp_dir, 'bp_pretrained_weights.mat'));
 pretrain_bp2 = load(fullfile(bp_dir, 'bp_pretrained_weights_plant2.mat'));
 

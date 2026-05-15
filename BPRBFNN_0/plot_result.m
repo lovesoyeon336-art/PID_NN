@@ -10,7 +10,7 @@ function plot_results()
     %% 仿真
     model = 'BP_RBFNN';
     fprintf('正在仿真 %s ...\n', model);
-    out = sim(model, 'StopTime', '7000');
+    out = sim(model, 'StopTime', '1000');
     fprintf('仿真完成\n');
 
     t = out.t;
