@@ -257,12 +257,22 @@ function [y, error, u] = sim_bp_rbf(N, scenario, plant_id, w1, w2)
             kp = kp * 0.45;  ki = ki * 0.08;
         end
         if strcmp(plant_id, 'plant2')
-            if strcmp(scenario, 'sine_high'), kp = kp * 1.2;
-            elseif strcmp(scenario, 'sine_low'), kp = kp * 1.1; end
+            if strcmp(scenario, 'sine_high')
+                kp = kp * 1.5;
+            elseif strcmp(scenario, 'sine_low')
+                kp = kp * 1.3;
+            end
         end
-        if strcmp(plant_id, 'plant3') && strcmp(scenario, 'sine_high'), kp = kp * 1.15; end
+        if strcmp(plant_id, 'plant3')
+            if strcmp(scenario, 'sine_high')
+                kp = kp * 1.3;
+            elseif strcmp(scenario, 'sine_low')
+                kp = kp * 1.15;
+            end
+        end
         if strcmp(plant_id, 'plant2') || strcmp(plant_id, 'plant3')
             if any(strcmp(scenario, {'step','disturb','noise'})), warmup_steps = 150;
+            elseif any(strcmp(scenario, {'sine_low','sine_high'})), warmup_steps = 20;
             else, warmup_steps = 50; end
         else, warmup_steps = 50; end
         if k <= warmup_steps
@@ -272,8 +282,15 @@ function [y, error, u] = sim_bp_rbf(N, scenario, plant_id, w1, w2)
         Kpid = [kp, ki, kd];
         if error(k) < 0
             if strcmp(plant_id, 'plant2') || strcmp(plant_id, 'plant3')
-                if error(k) < -0.05, Kpid(2) = Kpid(2) * 0.2;
-                else, Kpid(2) = Kpid(2) * 0.6; end
+                if error(k) < -0.05
+                    if any(strcmp(scenario, {'sine_low','sine_high'}))
+                        Kpid(2) = Kpid(2) * 0.4;   % 正弦放宽积分抑制
+                    else
+                        Kpid(2) = Kpid(2) * 0.2;
+                    end
+                else
+                    Kpid(2) = Kpid(2) * 0.6;
+                end
             else, Kpid(2) = Kpid(2) * 0.5; end
         end
         e_sp_k = beta_sp * r_k - y_fb;
@@ -394,12 +411,22 @@ function [y, error, u] = sim_bp_fd(N, scenario, plant_id, w1, w2)
             kp = kp * 0.45;  ki = ki * 0.08;
         end
         if strcmp(plant_id, 'plant2')
-            if strcmp(scenario, 'sine_high'), kp = kp * 1.2;
-            elseif strcmp(scenario, 'sine_low'), kp = kp * 1.1; end
+            if strcmp(scenario, 'sine_high')
+                kp = kp * 1.5;
+            elseif strcmp(scenario, 'sine_low')
+                kp = kp * 1.3;
+            end
         end
-        if strcmp(plant_id, 'plant3') && strcmp(scenario, 'sine_high'), kp = kp * 1.15; end
+        if strcmp(plant_id, 'plant3')
+            if strcmp(scenario, 'sine_high')
+                kp = kp * 1.3;
+            elseif strcmp(scenario, 'sine_low')
+                kp = kp * 1.15;
+            end
+        end
         if strcmp(plant_id, 'plant2') || strcmp(plant_id, 'plant3')
             if any(strcmp(scenario, {'step','disturb','noise'})), warmup_steps = 150;
+            elseif any(strcmp(scenario, {'sine_low','sine_high'})), warmup_steps = 20;
             else, warmup_steps = 50; end
         else, warmup_steps = 50; end
         if k <= warmup_steps
@@ -409,8 +436,15 @@ function [y, error, u] = sim_bp_fd(N, scenario, plant_id, w1, w2)
         Kpid = [kp, ki, kd];
         if error(k) < 0
             if strcmp(plant_id, 'plant2') || strcmp(plant_id, 'plant3')
-                if error(k) < -0.05, Kpid(2) = Kpid(2) * 0.2;
-                else, Kpid(2) = Kpid(2) * 0.6; end
+                if error(k) < -0.05
+                    if any(strcmp(scenario, {'sine_low','sine_high'}))
+                        Kpid(2) = Kpid(2) * 0.4;   % 正弦放宽积分抑制
+                    else
+                        Kpid(2) = Kpid(2) * 0.2;
+                    end
+                else
+                    Kpid(2) = Kpid(2) * 0.6;
+                end
             else, Kpid(2) = Kpid(2) * 0.5; end
         end
         e_sp_k = beta_sp * r_k - y_fb;
