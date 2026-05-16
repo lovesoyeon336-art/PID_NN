@@ -1,17 +1,18 @@
 clear; close all;
 
-%% ==================== 预训练 —— 对象2（全PID, Kd启用） ====================
+%% ==================== 预训练 —— Plant3 (Hammerstein 非线性) ====================
 IN = 5;   H = 5;  Out = 3;
 rate  = 0.002;
 rate2 = 0.01;
 N_pretrain = 3000;
-epochs = 10;
+epochs = 12;
 
-Kp_base = 1.0115;  Kp_delta = 11.0;  % 残差架构
-Ki_base = 0.1089;  Ki_delta = 3.0;
-Kd_base = 0;       Kd_delta = 5.0;
+% 残差架构：Plant3 有效增益变化大（0.5~1.58），需更大 Kp 覆盖范围
+Kp_base = 1.0;   Kp_delta = 8.0;
+Ki_base = 0.1;   Ki_delta = 2.0;
+Kd_base = 0;     Kd_delta = 4.0;
 scale_vec = [Kp_delta, Ki_delta, Kd_delta];
-ff_gain = 0.667;  beta_sp = 0.85;  u_sat = 5.0;
+ff_gain = 2.0;  beta_sp = 0.90;  u_sat = 3.0;
 
 %% ==================== Xavier 初始化（半规模） ====================
 rng(1);
@@ -59,18 +60,17 @@ for ep = 1:epochs
         delta_u = Kpid * e_pid;
         dr = r(k) - r_1;
         if abs(dr) <= 0.1, delta_u = delta_u + ff_gain * dr; end
-        delta_u = max(-0.5, min(0.5, delta_u));
+        delta_u = max(-1.0, min(1.0, delta_u));
         u(k) = max(-u_sat, min(u_sat, u_1 + delta_u));
 
-        % 对象2 (y(k) 由 u(k-1) 驱动)
-        y(k) = plant_dynamics('plant2', y_1, y_2, u_1, u_1, k);
+        y(k) = plant_dynamics('plant3', y_1, y_2, u_1, u_1, k);
         error(k) = r(k) - y(k);
 
         % 延时反向传播
         dead_zone = 0.002;
         if st_has && abs(error(k)) >= dead_zone
             dydu_raw = (y(k) - y_1) / (u_1 - u_2 + 0.0001);
-            du_sys = sign(dydu_raw) * 0.3;  % 符号 Jacobian: Plant2 cap=0.3
+            du_sys = sign(dydu_raw) * 0.5;  % Plant3 Jacobian cap=0.5（线性区增益 0.5）
 
             delta3 = zeros(1, Out);
             for l = 1:Out
@@ -115,24 +115,25 @@ for ep = 1:epochs
 end
 
 [script_dir, ~, ~] = fileparts(mfilename('fullpath'));
-save(fullfile(script_dir, 'bp_pretrained_weights_plant2.mat'), 'w1', 'w2');
-fprintf('权重已保存至 bp_pretrained_weights_plant2.mat\n');
+save(fullfile(script_dir, 'bp_pretrained_weights_plant3.mat'), 'w1', 'w2');
+fprintf('权重已保存至 bp_pretrained_weights_plant3.mat\n');
 
-%% ==================== 多样化参考信号（基础训练） ====================
+%% ==================== 参考信号（多幅值覆盖非线性区） ====================
 function r_k = get_pretrain_r(k, N_total, ep, epochs)
-    phase = mod(ep-1, 5);
+    phase = mod(ep-1, 6);
     switch phase
-        case 0  % 阶跃 r=1
+        case 0  % 小信号阶跃 r=0.5（线性区）
+            r_k = 0.5;
+        case 1  % 中等阶跃 r=1（过渡区）
             r_k = 1;
-        case 1  % 阶跃 r=2（方波高位）
+        case 2  % 大信号阶跃 r=2（非线性区）
             r_k = 2;
-        case 2  % 斜坡 0.5→2
+        case 3  % 斜坡 0.5→2（跨区过渡）
             r_k = 0.5 + 1.5 * min(1, k / N_total);
-        case 3  % 低频正弦 r=1+0.5sin
+        case 4  % 低频正弦 r=1+0.5sin
             r_k = 1 + 0.5 * sin(2*pi*0.005*k);
-        case 4  % 斜坡+阶跃混合
-            if k <= N_total/2, r_k = 0.5 + min(1, k/(N_total/2));
+        case 5  % 斜坡+阶跃混合
+            if k <= N_total/2, r_k = 0.5 + 1.5 * min(1, k/(N_total/2));
             else, r_k = 2; end
     end
 end
-

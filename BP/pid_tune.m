@@ -1,20 +1,11 @@
 clear; close all;
 
-%% ==================== 逐场景独立整定 PID —— 对象1 ====================
+%% ==================== 统一整定 PID —— 对象1 ====================
 
 N_tune = 2000;
 scenarios = {'step','sine_low','sine_high','ramp','perturb','disturb','noise'};
 nS = length(scenarios);
 
-init_2d = [
-    log(0.5),  log(0.1);
-    log(1.0),  log(0.5);
-    log(2.0),  log(0.2);
-    log(0.2),  log(0.05);
-    log(1.5),  log(0.3);
-    log(0.1),  log(0.8);
-    log(3.0),  log(0.05);
-];
 init_3d = [
     log(0.5),  log(0.2), log(0.05);
     log(1.0),  log(0.3), log(0.1);
@@ -23,77 +14,92 @@ init_3d = [
     log(1.5),  log(0.4), log(0.2);
     log(3.0),  log(0.8), log(0.01);
     log(0.8),  log(0.15),log(0.3);
+    log(0.1),  log(0.05),log(0.02);
+    log(5.0),  log(0.01),log(0.5);
+    log(0.2),  log(1.0), log(0.01);
 ];
-opts = optimset('Display', 'off', 'MaxIter', 500, 'TolX', 1e-6);
+opts = optimset('Display', 'iter', 'MaxIter', 1200, 'TolX', 1e-6);
 
-Kp_opt = zeros(1, nS);
-Ki_opt = zeros(1, nS);
-Kd_opt = zeros(1, nS);
+Kp_opt = 0;  Ki_opt = 0;  Kd_opt = 0;
 
+%% ==================== 多起点统一搜索（所有场景共享一组 Kp,Ki,Kd） ====================
+best_cost = inf;  best_x = [];
+for i = 1:size(init_3d, 1)
+    cost_fn = @(x) pid_cost_unified(x, N_tune, scenarios);
+    [x_opt, cost_val] = fminsearch(cost_fn, init_3d(i, :), opts);
+    fprintf('  起点 %2d: cost=%.4f  Kp=%.4f  Ki=%.4f  Kd=%.4f\n', ...
+        i, cost_val, exp(x_opt(1)), exp(x_opt(2)), exp(x_opt(3)));
+    if cost_val < best_cost
+        best_cost = cost_val;  best_x = x_opt;
+    end
+end
+
+Kp_opt = exp(best_x(1));
+Ki_opt = exp(best_x(2));
+Kd_opt = exp(best_x(3));
+
+fprintf('\n========== Plant1 统一PID最优参数 ==========\n');
+fprintf('Kp=%.4f  Ki=%.4f  Kd=%.4f\n\n', Kp_opt, Ki_opt, Kd_opt);
+
+%% ==================== 逐场景验证 ====================
+fprintf('%-10s  %8s  %8s  %8s\n', '场景', '超调%', 'MAE', 'max|e|');
+fprintf('%s\n', repmat('-', 1, 50));
 for s = 1:nS
     sc = scenarios{s};
-    is_sine = any(strcmp(sc, {'sine_low','sine_high'}));
-
-    if is_sine
-        % 正弦场景：3D搜索(Kp,Ki,Kd) + ISE代价 + 前馈 + 热启动
-        best_cost = inf;  best_x = [];
-        for i = 1:size(init_3d, 1)
-            cost_fn = @(x) pid_cost_sine(x, N_tune, sc);
-            [x_opt, cost_val] = fminsearch(cost_fn, init_3d(i, :), opts);
-            if cost_val < best_cost
-                best_cost = cost_val;  best_x = x_opt;
-            end
-        end
-        Kp_opt(s) = exp(best_x(1));
-        Ki_opt(s) = exp(best_x(2));
-        Kd_opt(s) = exp(best_x(3));
-    else
-        % 非正弦场景：2D搜索(Kp,Ki) + ITAE代价 + 超调惩罚
-        best_cost = inf;  best_x = [];
-        for i = 1:size(init_2d, 1)
-            cost_fn = @(x) pid_cost_step(x, N_tune, sc);
-            [x_opt, cost_val] = fminsearch(cost_fn, init_2d(i, :), opts);
-            if cost_val < best_cost
-                best_cost = cost_val;  best_x = x_opt;
-            end
-        end
-        Kp_opt(s) = exp(best_x(1));
-        Ki_opt(s) = exp(best_x(2));
-        Kd_opt(s) = 0;
-    end
-
-    [y_hist, e_hist] = sim_pid(N_tune, sc, Kp_opt(s), Ki_opt(s), Kd_opt(s));
-    fprintf('%-10s  Kp=%.4f  Ki=%.4f  Kd=%.4f  MAE=%.4f  max|e|=%.4f\n', ...
-        sc, Kp_opt(s), Ki_opt(s), Kd_opt(s), mean(abs(e_hist)), max(abs(e_hist)));
+    [y_hist, e_hist] = sim_pid(N_tune, sc, Kp_opt, Ki_opt, Kd_opt);
+    r_seq = zeros(1, N_tune);
+    for k = 1:N_tune, r_seq(k) = get_r(k, sc); end
+    ref_nom = 1;
+    ov = max(0, max(y_hist - r_seq));
+    ov_pct = ov / ref_nom * 100;
+    fprintf('%-10s  %7.2f%%  %8.4f  %8.4f\n', ...
+        sc, ov_pct, mean(abs(e_hist)), max(abs(e_hist)));
 end
 
 %% ==================== 保存 ====================
 [script_dir, ~, ~] = fileparts(mfilename('fullpath'));
 save(fullfile(script_dir, 'pid_tuned_params.mat'), ...
     'scenarios', 'Kp_opt', 'Ki_opt', 'Kd_opt');
-fprintf('\n逐场景PID参数已保存至 pid_tuned_params.mat\n');
+fprintf('\nPlant1 统一PID参数已保存至 pid_tuned_params.mat\n');
 
-%% ==================== 代价函数 ====================
+%% ==================== 统一代价函数 ====================
 
-function cost = pid_cost_step(x, N_sim, scenario)
-    Kp = exp(x(1));  Ki = exp(x(2));  Kd = 0;
-    [y_hist, e_hist] = sim_pid(N_sim, scenario, Kp, Ki, Kd);
-    itae = sum((1:N_sim) .* abs(e_hist));
-    ov_penalty = 0;
-    if any(strcmp(scenario, {'step','perturb','disturb','noise'}))
-        ov = max(0, max(y_hist) - 1);
-        ov_penalty = 5000 * ov^2;
-    end
-    cost = itae/1000 + ov_penalty;
-end
-
-function cost = pid_cost_sine(x, N_sim, scenario)
+function cost = pid_cost_unified(x, N_sim, scenarios)
     Kp = exp(x(1));  Ki = exp(x(2));  Kd = exp(x(3));
-    if Kp < 0.01, cost = 1e10; return; end  % 禁止Kp归零
-    [~, e_hist] = sim_pid(N_sim, scenario, Kp, Ki, Kd);
-    mae = mean(abs(e_hist));
-    pk  = max(abs(e_hist));
-    cost = mae + 0.1 * pk;
+    if Kp < 0.01, cost = 1e10; return; end
+
+    nS = length(scenarios);
+    tracking_costs = zeros(1, nS);
+    ov_pcts = zeros(1, nS);
+
+    for s = 1:nS
+        sc = scenarios{s};
+        [y_hist, e_hist] = sim_pid(N_sim, sc, Kp, Ki, Kd);
+
+        r_seq = zeros(1, N_sim);
+        for k = 1:N_sim, r_seq(k) = get_r(k, sc); end
+
+        ref_nominal = 1;
+        ov = max(0, max(y_hist - r_seq));
+        ov_pcts(s) = ov / ref_nominal * 100;
+
+        if any(strcmp(sc, {'sine_low','sine_high','ramp'}))
+            tracking_costs(s) = mean(abs(e_hist));
+        else
+            tracking_costs(s) = sum((1:N_sim) .* abs(e_hist)) / 1000;
+        end
+    end
+
+    ov_penalties = zeros(1, nS);
+    for s = 1:nS
+        ov = ov_pcts(s);
+        if ov > 12
+            ov_penalties(s) = 20*(ov-12)^2 + 100*(ov-12);
+        else
+            ov_penalties(s) = 0.5*ov^2;
+        end
+    end
+    cost = sum(tracking_costs) + sum(ov_penalties);
 end
 
 %% ==================== 仿真函数 ====================

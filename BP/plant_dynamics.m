@@ -20,6 +20,13 @@ function y_k = plant_dynamics(plant_id, y_1, y_2, u_k, u_1, k, a_k_override)
             b = 0.03;
             y_k = a1*y_1 + a2*y_2 + b*u_1;
 
+        case 'plant3'
+            % Hammerstein: 静态输入非线性 + 二阶欠阻尼线性动态
+            % v = u + 0.15*u^3   (增强立方非线性: 大信号有效增益变化更大)
+            % y(k) = 1.6*y(k-1) - 0.68*y(k-2) + 0.06*v(k-1)
+            v = u_1 + 0.15 * u_1^3;
+            y_k = 1.6*y_1 - 0.68*y_2 + 0.06*v;
+
         otherwise
             error('Unknown plant_id: %s', plant_id);
     end

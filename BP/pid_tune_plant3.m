@@ -1,27 +1,25 @@
 clear; close all;
 
-%% ==================== 统一整定 PID —— 对象2 ====================
+%% ==================== 统一整定 PID —— Plant3 (Hammerstein) ====================
 
 N_tune = 2000;
 scenarios = {'step','sine_low','sine_high','ramp','disturb','noise','square'};
 nS = length(scenarios);
 
 init_3d = [
-    log(1.0),  log(0.3), log(0.05);
-    log(3.0),  log(0.5), log(0.1);
-    log(5.0),  log(0.2), log(0.02);
+    log(1.0),  log(0.1), log(0.05);
+    log(3.0),  log(0.3), log(0.2);
+    log(5.0),  log(0.5), log(0.5);
     log(0.5),  log(0.8), log(0.01);
     log(2.0),  log(0.4), log(0.3);
-    log(7.0),  log(0.1), log(0.5);
-    log(1.5),  log(1.0), log(0.03);
+    log(7.0),  log(0.1), log(1.0);
+    log(1.5),  log(1.0), log(0.1);
     log(0.2),  log(0.2), log(0.02);
-    log(10.0), log(0.05),log(0.8);
-    log(0.8),  log(0.15),log(0.01);
-    % 高Ki探索：鼓励积分作用
+    log(10.0), log(0.05),log(1.5);
+    log(0.8),  log(0.15),log(0.05);
     log(0.5),  log(2.0), log(0.01);
-    log(5.0),  log(1.5), log(0.1);
-    log(2.0),  log(3.0), log(0.05);
-    % 甜点区密集采样：Kp∈[2,8], Ki∈[0.02,0.3], Kd∈[1,6]
+    log(5.0),  log(1.5), log(0.3);
+    log(2.0),  log(3.0), log(0.1);
     log(3.0),  log(0.05), log(2.0);
     log(4.0),  log(0.10), log(3.0);
     log(5.0),  log(0.15), log(4.0);
@@ -34,7 +32,7 @@ opts = optimset('Display', 'iter', 'MaxIter', 2000, 'TolX', 1e-6);
 
 Kp_opt = 0;  Ki_opt = 0;  Kd_opt = 0;
 
-%% ==================== 多起点统一搜索（所有场景共享一组 Kp,Ki,Kd） ====================
+%% ==================== 多起点统一搜索 ====================
 best_cost = inf;  best_x = [];
 for i = 1:size(init_3d, 1)
     cost_fn = @(x) pid_cost_unified(x, N_tune, scenarios);
@@ -50,7 +48,7 @@ Kp_opt = exp(best_x(1));
 Ki_opt = exp(best_x(2));
 Kd_opt = exp(best_x(3));
 
-fprintf('\n========== Plant2 统一PID最优参数 ==========\n');
+fprintf('\n========== Plant3 统一PID最优参数 ==========\n');
 fprintf('Kp=%.4f  Ki=%.4f  Kd=%.4f\n\n', Kp_opt, Ki_opt, Kd_opt);
 
 %% ==================== 逐场景验证 ====================
@@ -70,9 +68,9 @@ end
 
 %% ==================== 保存 ====================
 [script_dir, ~, ~] = fileparts(mfilename('fullpath'));
-save(fullfile(script_dir, 'pid_tuned_params_plant2.mat'), ...
+save(fullfile(script_dir, 'pid_tuned_params_plant3.mat'), ...
     'scenarios', 'Kp_opt', 'Ki_opt', 'Kd_opt');
-fprintf('\nPlant2 统一PID参数已保存至 pid_tuned_params_plant2.mat\n');
+fprintf('\nPlant3 统一PID参数已保存至 pid_tuned_params_plant3.mat\n');
 
 %% ==================== 统一代价函数 ====================
 
@@ -120,9 +118,9 @@ end
 
 function [y_hist, e_hist] = sim_pid(N_sim, scenario, Kp, Ki, Kd)
     is_sine = any(strcmp(scenario, {'sine_low','sine_high'}));
-    ff_gain = 0.667;  beta_sp = 0.85;  du_max = 0.5;  u_sat = 5.0;
+    ff_gain = 2.0;  beta_sp = 0.90;  du_max = 1.0;  u_sat = 3.0;
     if is_sine
-        r_start = 1 + 0.5 * sin(2*pi*0.005);  % 热启动
+        r_start = 1 + 0.5 * sin(2*pi*0.005);
         y_1 = r_start;  y_2 = r_start;
     else
         y_1 = 0;  y_2 = 0;
@@ -142,7 +140,7 @@ function [y_hist, e_hist] = sim_pid(N_sim, scenario, Kp, Ki, Kd)
         if abs(dr) <= 0.1, delta_u = delta_u + ff_gain * dr; end
         delta_u = max(-du_max, min(du_max, delta_u));
         u_k = max(-u_sat, min(u_sat, u_1 + delta_u));
-        y_true = plant_dynamics('plant2', y_1, y_2, u_1, u_1, k);
+        y_true = plant_dynamics('plant3', y_1, y_2, u_1, u_1, k);
         y_hist(k) = y_true;  e_hist(k) = r_k - y_true;
         e_2 = e_1;  e_1 = e_cur;  e_sp_2 = e_sp_1;  e_sp_1 = e_sp_k;
         y_2 = y_1;  y_1 = y_true;  u_1 = u_k;  r_1 = r_k;

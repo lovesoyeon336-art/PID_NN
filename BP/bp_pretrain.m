@@ -84,8 +84,8 @@ for ep = 1:epochs
         % 延时反向传播（用上一拍存储状态 + 当前误差）
         dead_zone = 0.002;
         if st_has && abs(error(k)) >= dead_zone
-        dydu = (y(k) - y_1) / (u_1 - u_2 + 0.0001);
-        du_sys = max(-1, min(1, dydu));
+        dydu_raw = (y(k) - y_1) / (u_1 - u_2 + 0.0001);
+        du_sys = sign(dydu_raw) * 1.0;  % 符号 Jacobian
 
         delta3 = zeros(1, Out);
         for l = 1:Out
