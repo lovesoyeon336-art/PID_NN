@@ -14,7 +14,7 @@ mu_w    = 0.05;   mu_c   = 0.02;   mu_s   = 0.02;
 sig_min = 0.5;    % 增大下限，避免过宽的基函数吞掉 u 敏感度
 lambda_jac = 0.50; % Jacobian 匹配权重（提高以改善闭环梯度精度）
 
-for plant_idx = 1:2
+for plant_idx = 1:3
     pid = sprintf('plant%d', plant_idx);
     fprintf('\n===== RBF 离线训练: 对象%d =====\n', plant_idx);
 
@@ -24,11 +24,13 @@ for plant_idx = 1:2
     y_ex = zeros(1, N_excite);
     y1 = 0; y2 = 0;
 
+    % Plant3 需要更大激励覆盖非线性区 (u_sat=3.0)
+    if plant_idx == 3, u_amp = 4.0; else, u_amp = 3.0; end
     hold_steps = 0;
     u_val = 0;
     for k = 1:N_excite
         if hold_steps <= 0
-            u_val = (rand - 0.5) * 3.0;
+            u_val = (rand - 0.5) * u_amp;
             hold_steps = 20 + randi(40);
         end
         u_ex(k) = u_val;
