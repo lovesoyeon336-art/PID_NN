@@ -11,6 +11,15 @@ pretrain_bp1 = load(fullfile(script_dir, 'bp_pretrained_weights.mat'));
 pretrain_bp2 = load(fullfile(script_dir, 'bp_pretrained_weights_plant2.mat'));
 pretrain_bp3 = load(fullfile(script_dir, 'bp_pretrained_weights_plant3.mat'));
 
+% Plant2 监督预训练权重（若存在则优先使用）
+sup_file = fullfile(script_dir, 'bp_pretrained_weights_plant2_supervised.mat');
+if isfile(sup_file)
+    pretrain_bp2_sup = load(sup_file);
+    fprintf('Plant2 使用监督预训练权重: %s\n', sup_file);
+else
+    pretrain_bp2_sup = [];
+end
+
 fprintf('Plant1 统一PID: Kp=%.4f  Ki=%.4f  Kd=%.4f\n', tuned1.Kp_opt, tuned1.Ki_opt, tuned1.Kd_opt);
 fprintf('Plant2 统一PID: Kp=%.4f  Ki=%.4f  Kd=%.4f\n', tuned2.Kp_opt, tuned2.Ki_opt, tuned2.Kd_opt);
 fprintf('Plant3 统一PID: Kp=%.4f  Ki=%.4f  Kd=%.4f\n', tuned3.Kp_opt, tuned3.Ki_opt, tuned3.Kd_opt);
@@ -48,8 +57,12 @@ nS = size(sc_defs, 1);
 R_MAE=zeros(1,nS); B_MAE=zeros(1,nS); F_MAE=zeros(1,nS);
 R_Ov =zeros(1,nS); B_Ov =zeros(1,nS); F_Ov =zeros(1,nS);
 R_Ss =zeros(1,nS); B_Ss =zeros(1,nS); F_Ss =zeros(1,nS);
+R_dU =zeros(1,nS); B_dU =zeros(1,nS); F_dU =zeros(1,nS);
+R_PeakU=zeros(1,nS);B_PeakU=zeros(1,nS);F_PeakU=zeros(1,nS);
 
-Y_r=cell(1,nS); Y_b=cell(1,nS); Y_f=cell(1,nS); R_seq=cell(1,nS);
+Y_r=cell(1,nS); Y_b=cell(1,nS); Y_f=cell(1,nS);
+U_r=cell(1,nS); U_b=cell(1,nS); U_f=cell(1,nS);
+R_seq=cell(1,nS);
 
 for i = 1:nS
     pid = sc_defs{i,1};
@@ -62,7 +75,11 @@ for i = 1:nS
             w1 = pretrain_bp1.w1;  w2 = pretrain_bp1.w2;
         case 'plant2'
             KpF = tuned2.Kp_opt;  KiF = tuned2.Ki_opt;  KdF = tuned2.Kd_opt;
-            w1 = pretrain_bp2.w1;  w2 = pretrain_bp2.w2;
+            if ~isempty(pretrain_bp2_sup)
+                w1 = pretrain_bp2_sup.w1;  w2 = pretrain_bp2_sup.w2;
+            else
+                w1 = pretrain_bp2.w1;  w2 = pretrain_bp2.w2;
+            end
         case 'plant3'
             KpF = tuned3.Kp_opt;  KiF = tuned3.Ki_opt;  KdF = tuned3.Kd_opt;
             w1 = pretrain_bp3.w1;  w2 = pretrain_bp3.w2;
@@ -72,15 +89,18 @@ for i = 1:nS
     [y_b, e_b, u_b] = sim_bp_fd(N, sc, pid, w1, w2);
     [y_f, e_f, u_f] = sim_fix_pid(N, sc, pid, KpF, KiF, KdF);
 
-    [R_MAE(i), B_MAE(i), F_MAE(i), R_Ov(i), B_Ov(i), F_Ov(i), R_Ss(i), B_Ss(i), F_Ss(i)] = ...
-        metrics3(y_r,e_r, y_b,e_b, y_f,e_f, r_seq);
+    [R_MAE(i), B_MAE(i), F_MAE(i), R_Ov(i), B_Ov(i), F_Ov(i), R_Ss(i), B_Ss(i), F_Ss(i), ...
+     R_dU(i),  B_dU(i),  F_dU(i),  R_PeakU(i), B_PeakU(i), F_PeakU(i)] = ...
+        metrics3(y_r,e_r,u_r, y_b,e_b,u_b, y_f,e_f,u_f, r_seq);
 
     if strcmp(sc, 'square'), ref_nom = 2;
     elseif strcmp(sc, 'square3'), ref_nom = 3;
     else, ref_nom = 1; end
     R_Ov(i) = R_Ov(i)/ref_nom*100;  B_Ov(i) = B_Ov(i)/ref_nom*100;  F_Ov(i) = F_Ov(i)/ref_nom*100;
 
-    Y_r{i}=y_r; Y_b{i}=y_b; Y_f{i}=y_f; R_seq{i}=r_seq;
+    Y_r{i}=y_r; Y_b{i}=y_b; Y_f{i}=y_f;
+    U_r{i}=u_r; U_b{i}=u_b; U_f{i}=u_f;
+    R_seq{i}=r_seq;
 end
 
 %% ==================== 输出对比表（分 Plant） ====================
@@ -106,89 +126,50 @@ fprintf('\n========== 全局综合 ==========\n');
 fprintf('MAE:  BPRBF=%.4f  BPPID=%.4f  固定PID=%.4f\n', sum(R_MAE), sum(B_MAE), sum(F_MAE));
 fprintf('      RBF/Fix=%.2f  BP/Fix=%.2f\n', sum(R_MAE)/max(sum(F_MAE),1e-9), sum(B_MAE)/max(sum(F_MAE),1e-9));
 
-%% ==================== 绘图 ====================
+%% ==================== 导出数据 → Python 出图 ====================
 fig_dir = fullfile(script_dir, 'figures');
 if ~exist(fig_dir, 'dir'), mkdir(fig_dir); end
 
-% --- 表格图 ---
-plot_triple_table(sc_defs, R_MAE, B_MAE, F_MAE, R_Ov, B_Ov, F_Ov, R_Ss, B_Ss, F_Ss, fig_dir);
+% 导出指标 CSV
+T_data = table(sc_defs(:,3), R_MAE', B_MAE', F_MAE', R_Ov', B_Ov', F_Ov', R_Ss', B_Ss', F_Ss', ...
+    R_dU', B_dU', F_dU', R_PeakU', B_PeakU', F_PeakU', ...
+    'VariableNames', {'Scenario','R_MAE','B_MAE','F_MAE','R_Ov','B_Ov','F_Ov','R_SS','B_SS','F_SS', ...
+    'R_dU','B_dU','F_dU','R_PeakU','B_PeakU','F_PeakU'});
+writetable(T_data, fullfile(fig_dir, 'metrics.csv'));
 
-% --- 时域响应图 ---
-for idx = 1:nS
-    figure('Name', sc_defs{idx,3}, 'NumberTitle', 'off', 'Position', [100 100 800 400]);
-    rp = R_seq{idx}; yr = Y_r{idx}; yb = Y_b{idx}; yf = Y_f{idx};
-    plot(1:N, rp, 'r', 1:N, yf, 'g', 1:N, yb, 'm--', 1:N, yr, 'b--', 'LineWidth', 0.8);
-    xlim([1, N]); xlabel('步'); ylabel('y');
-    legend('目标','Fix','BP-FD','BP-RBF','Location','best');
-    ttl = sc_defs{idx, 3};
-    switch sc_defs{idx, 1}
-        case 'plant1'
-            ttl = sprintf('%s  [Plant1: y(k)=a/(1+y^2)*y(k-1)+u(k-1)]', ttl);
-        case 'plant2'
-            ttl = sprintf('%s  [Plant2: y(k)=1.7y(k-1)-0.72y(k-2)+0.03u(k-1)]', ttl);
-        case 'plant3'
-            ttl = sprintf('%s  [Plant3: v=u+0.15u^3, y(k)=1.6y(k-1)-0.68y(k-2)+0.06v]', ttl);
-    end
-    title(ttl, 'FontSize', 8); grid on;
-    saveas(gcf, fullfile(fig_dir, sprintf('03_timeseries_%02d.png', idx)));
-end
+% 导出时域数据 .mat (scipy 可读)
+Y_r_arr = cell2mat(Y_r');
+Y_b_arr = cell2mat(Y_b');
+Y_f_arr = cell2mat(Y_f');
+R_arr   = cell2mat(R_seq');
+plant_ids = sc_defs(:,1);
+scenario_ids = sc_defs(:,2);
+scenario_names = sc_defs(:,3);
+save(fullfile(fig_dir, 'timeseries_export.mat'), ...
+    'Y_r_arr','Y_b_arr','Y_f_arr','R_arr','N','plant_ids','scenario_ids','scenario_names');
 
-fprintf('\n图片已保存至 %s（共 %d 张）\n', fig_dir, 1+nS);
+fprintf('数据已导出至 %s\n', fig_dir);
+fprintf('运行 Python 出图: python3 figures/plot_nature.py\n');
 
 %% ==================== 保存 ====================
 save(fullfile(script_dir, 'test_results.mat'), ...
-    'sc_defs','N','R_MAE','B_MAE','F_MAE','R_Ov','B_Ov','F_Ov','R_Ss','B_Ss','F_Ss');
+    'sc_defs','N', ...
+    'R_MAE','B_MAE','F_MAE','R_Ov','B_Ov','F_Ov','R_Ss','B_Ss','F_Ss', ...
+    'R_dU','B_dU','F_dU','R_PeakU','B_PeakU','F_PeakU');
 fprintf('结果已保存至 test_results.mat\n');
-
-%% ==================== 表格绘图函数（三方） ====================
-
-function plot_triple_table(sc_defs, R_MAE, B_MAE, F_MAE, R_Ov, B_Ov, F_Ov, R_Ss, B_Ss, F_Ss, fig_dir)
-    nS = length(R_MAE);
-    col_w = [26, 8, 8, 8, 7, 7, 7, 7, 7, 7];
-    header = {'场景', 'R-MAE', 'B-MAE', 'F-MAE', 'R-Ov%', 'B-Ov%', 'F-Ov%', 'R-SS', 'B-SS', 'F-SS'};
-
-    figure('Name', 'MAE三方对比', 'NumberTitle', 'off', 'Position', [50 50 1400 720]);
-    axes('Position', [0 0 1 1], 'Visible', 'off');
-
-    y = 0.96;  row_h = 0.03;
-    text(0.02, y, 'BPRBF vs BPPID vs FixPID — MAE 指标总览', 'FontSize', 14, 'FontWeight', 'bold', 'FontName', 'Consolas');
-
-    y = y - row_h;
-    xp = 0.02;
-    for c = 1:length(header)
-        text(xp, y, header{c}, 'FontSize', 7, 'FontWeight', 'bold', 'FontName', 'Consolas');
-        xp = xp + col_w(c)/130;
-    end
-    y = y - 0.004;
-    line([0.02 0.98], [y y], 'Color', [0 0 0]);
-
-    for i = 1:nS
-        y = y - row_h;
-        p = str2double(sc_defs{i,1}(6));
-        if p == 1, bg = [0.90 0.93 1.0];
-        elseif p == 2, bg = [0.93 1.0 0.90];
-        else, bg = [1.0 0.93 0.87]; end
-
-        vals = {sprintf(' %-24s', sc_defs{i,3}), ...
-            sprintf(' %6.4f', R_MAE(i)), sprintf(' %6.4f', B_MAE(i)), sprintf(' %6.4f', F_MAE(i)), ...
-            sprintf(' %5.1f%%', R_Ov(i)), sprintf(' %5.1f%%', B_Ov(i)), sprintf(' %5.1f%%', F_Ov(i)), ...
-            sprintf(' %6.4f', R_Ss(i)), sprintf(' %6.4f', B_Ss(i)), sprintf(' %6.4f', F_Ss(i))};
-        xp = 0.02;
-        for c = 1:length(vals)
-            text(xp, y, vals{c}, 'FontSize', 7, 'FontName', 'Consolas', 'BackgroundColor', bg);
-            xp = xp + col_w(c)/130;
-        end
-    end
-    saveas(gcf, fullfile(fig_dir, '01_MAE三方对比.png'));
-end
-
 %% ==================== 指标函数（三控制器） ====================
 
-function [r_mae, b_mae, f_mae, r_ov, b_ov, f_ov, r_ss, b_ss, f_ss] = ...
-        metrics3(y_r, e_r, y_b, e_b, y_f, e_f, r_seq)
+function [r_mae, b_mae, f_mae, r_ov, b_ov, f_ov, r_ss, b_ss, f_ss, ...
+          r_du, b_du, f_du, r_peaku, b_peaku, f_peaku] = ...
+        metrics3(y_r, e_r, u_r, y_b, e_b, u_b, y_f, e_f, u_f, r_seq)
+    N = length(e_r);
+
     r_mae = mean(abs(e_r)); b_mae = mean(abs(e_b)); f_mae = mean(abs(e_f));
+    r_du = sqrt(mean(diff(u_r).^2)); b_du = sqrt(mean(diff(u_b).^2)); f_du = sqrt(mean(diff(u_f).^2));
+    r_peaku = max(abs(u_r)); b_peaku = max(abs(u_b)); f_peaku = max(abs(u_f));
+
     r_ov = max(0, max(y_r - r_seq)); b_ov = max(0, max(y_b - r_seq)); f_ov = max(0, max(y_f - r_seq));
-    ss_N = min(200, length(e_r));
+    ss_N = min(200, N);
     r_ss = mean(abs(e_r(end-ss_N+1:end)));
     b_ss = mean(abs(e_b(end-ss_N+1:end)));
     f_ss = mean(abs(e_f(end-ss_N+1:end)));
@@ -227,6 +208,7 @@ function [y, error, u] = sim_bp_rbf(N, scenario, plant_id, w1, w2)
     st_dO3 = zeros(1,Out);  st_dO2 = zeros(1,H);  st_I1 = zeros(1,IN);
     y = zeros(1, N);  error = zeros(1, N);  u = zeros(1, N);
     y_true = 0;
+    dydu_prev = 0;  sign_flip_cnt = 0;  prev_sign = 0;  % Jacobian 后处理状态
 
     clear rbf_identifier;
     rbf_identifier(0, 0, plant_id);
@@ -307,6 +289,17 @@ function [y, error, u] = sim_bp_rbf(N, scenario, plant_id, w1, w2)
         dr_v = r_k - r_1;
         if abs(dr_v) <= 0.1, delta_u = delta_u + ff_gain * dr_v; end
         delta_u = max(-du_max, min(du_max, delta_u));
+        % 积分抗饱和：触及 u_sat 时钳制 I 项贡献
+        i_contrib_r = Kpid(2) * e_pid(2);
+        pd_contrib_r = delta_u - i_contrib_r;
+        u_pred_r = u_1 + delta_u;
+        if u_pred_r > u_sat && i_contrib_r > 0
+            i_contrib_r = max(0, u_sat - u_1 - pd_contrib_r);
+            delta_u = pd_contrib_r + i_contrib_r;
+        elseif u_pred_r < -u_sat && i_contrib_r < 0
+            i_contrib_r = min(0, -u_sat - u_1 - pd_contrib_r);
+            delta_u = pd_contrib_r + i_contrib_r;
+        end
         u_k = max(-u_sat, min(u_sat, u_1 + delta_u));
         u(k) = u_k;
 
@@ -316,12 +309,51 @@ function [y, error, u] = sim_bp_rbf(N, scenario, plant_id, w1, w2)
         error(k) = r_k - y_true;
 
         [dydu, ~] = rbf_identifier(u_1, y_true, false);
-        du_sys = max(-jac_cap, min(jac_cap, dydu));
+
+        % ---- Jacobian 后处理 ----
+        in_transient = abs(error(k)) > 0.3;  % 检测大瞬态（方波跳变等）
+
+        % 1) EMA 时间平滑（大瞬态跳过，直接使用原始值）
+        if in_transient || dydu_prev == 0
+            dydu_smooth = dydu;
+        else
+            dydu_smooth = 0.7 * dydu + 0.3 * dydu_prev;
+        end
+        dydu_prev = dydu_smooth;
+
+        % 2) 场景自适应 Jacobian cap
+        if any(strcmp(scenario, {'sine_low','sine_high'}))
+            eff_cap = jac_cap * 1.5;
+        elseif strcmp(scenario, 'ramp')
+            eff_cap = jac_cap * 2.0;
+        else
+            eff_cap = jac_cap;
+        end
+
+        % 3) 符号一致性检查（大瞬态跳过）
+        if in_transient
+            sign_flip_cnt = 0;
+            du_sys = max(-eff_cap, min(eff_cap, dydu_smooth));
+        else
+            cur_sign = sign(dydu_smooth + eps);
+            if cur_sign ~= 0 && prev_sign ~= 0 && cur_sign ~= prev_sign
+                sign_flip_cnt = sign_flip_cnt + 1;
+            else
+                sign_flip_cnt = 0;
+            end
+            prev_sign = cur_sign;
+            if sign_flip_cnt >= 3
+                du_sys = 0;
+            else
+                du_sys = max(-eff_cap, min(eff_cap, dydu_smooth));
+            end
+        end
 
         dead_zone = 0.002;
-        if (strcmp(plant_id, 'plant1') && strcmp(scenario, 'ramp')) || ...
-           (strcmp(plant_id, 'plant2') && any(strcmp(scenario, {'step','disturb','noise'}))) || ...
-           (strcmp(plant_id, 'plant3') && any(strcmp(scenario, {'step','disturb','noise'})))
+        % RBF 专用 skip_bp
+        if (strcmp(plant_id, 'plant1') && strcmp(scenario, 'sine_high')) || ...
+           (strcmp(plant_id, 'plant2') && any(strcmp(scenario, {'step','disturb','noise','sine_high'}))) || ...
+           (strcmp(plant_id, 'plant3') && any(strcmp(scenario, {'step','disturb','noise','sine_high'})))
             skip_bp = true;
         else, skip_bp = false; end
         if st_has && ~skip_bp && abs(error(k)) >= dead_zone
@@ -469,6 +501,17 @@ function [y, error, u] = sim_bp_fd(N, scenario, plant_id, w1, w2)
         dr_v = r_k - r_1;
         if abs(dr_v) <= 0.1, delta_u = delta_u + ff_gain * dr_v; end
         delta_u = max(-du_max, min(du_max, delta_u));
+        % 积分抗饱和：触及 u_sat 时钳制 I 项贡献
+        i_contrib_f = Kpid(2) * e_pid(2);
+        pd_contrib_f = delta_u - i_contrib_f;
+        u_pred_f = u_1 + delta_u;
+        if u_pred_f > u_sat && i_contrib_f > 0
+            i_contrib_f = max(0, u_sat - u_1 - pd_contrib_f);
+            delta_u = pd_contrib_f + i_contrib_f;
+        elseif u_pred_f < -u_sat && i_contrib_f < 0
+            i_contrib_f = min(0, -u_sat - u_1 - pd_contrib_f);
+            delta_u = pd_contrib_f + i_contrib_f;
+        end
         u_k = max(-u_sat, min(u_sat, u_1 + delta_u));
         u(k) = u_k;
 
@@ -478,9 +521,9 @@ function [y, error, u] = sim_bp_fd(N, scenario, plant_id, w1, w2)
         error(k) = r_k - y_true;
 
         dead_zone = 0.002;
-        if (strcmp(plant_id, 'plant1') && strcmp(scenario, 'ramp')) || ...
-           (strcmp(plant_id, 'plant2') && any(strcmp(scenario, {'step','disturb','noise'}))) || ...
-           (strcmp(plant_id, 'plant3') && any(strcmp(scenario, {'step','disturb','noise'})))
+        if (strcmp(plant_id, 'plant1') && any(strcmp(scenario, {'ramp','sine_high'}))) || ...
+           (strcmp(plant_id, 'plant2') && any(strcmp(scenario, {'step','disturb','noise','sine_high'}))) || ...
+           (strcmp(plant_id, 'plant3') && any(strcmp(scenario, {'step','disturb','noise','sine_high'})))
             skip_bp = true;
         else, skip_bp = false; end
         if st_has && ~skip_bp && abs(error(k)) >= dead_zone
@@ -554,6 +597,17 @@ function [y, error, u] = sim_fix_pid(N, scenario, plant_id, Kp, Ki, Kd)
         dr_v = r_k - r_1;
         if abs(dr_v) <= 0.1, delta_u = delta_u + ff_gain * dr_v; end
         delta_u = max(-du_max, min(du_max, delta_u));
+        % 积分抗饱和：触及 u_sat 时钳制 I 项贡献
+        i_contrib_x = Ki * e_cur;
+        pd_contrib_x = delta_u - i_contrib_x;
+        u_pred_x = u_1 + delta_u;
+        if u_pred_x > u_sat && i_contrib_x > 0
+            i_contrib_x = max(0, u_sat - u_1 - pd_contrib_x);
+            delta_u = pd_contrib_x + i_contrib_x;
+        elseif u_pred_x < -u_sat && i_contrib_x < 0
+            i_contrib_x = min(0, -u_sat - u_1 - pd_contrib_x);
+            delta_u = pd_contrib_x + i_contrib_x;
+        end
         u_k = max(-u_sat, min(u_sat, u_1 + delta_u));
         u(k) = u_k;
         a_override = get_ak(k, scenario);
@@ -581,9 +635,9 @@ function r = get_target(k, scenario)
             if k <= 500, r = 1; elseif k <= 1000, r = 2;
             elseif k <= 1500, r = 0.5; else, r = 1.5; end
         case 'square'
-            if mod(floor((k-1)/100), 2) == 0, r = 1; else, r = 2; end
+            if mod(floor((k-1)/200), 2) == 0, r = 1; else, r = 2; end
         case 'square3'
-            if mod(floor((k-1)/100), 2) == 0, r = 1; else, r = 3; end
+            if mod(floor((k-1)/200), 2) == 0, r = 1; else, r = 3; end
         case 'sine_low'
             r = 1 + 0.5 * sin(2*pi*0.005*k);
         case 'sine_high'

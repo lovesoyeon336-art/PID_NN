@@ -60,7 +60,7 @@ kd   = zeros(1, N);
 % 因此权重更新延迟一拍：k+1 拍用 k 拍存储的状态 + e(k+1) 更新
 for k = 1:N
 
-    time(k) = k;
+    time(k) = k * 0.01;
 
     % ---- ① 误差计算 ----
     r(k) = r_target;
@@ -168,13 +168,13 @@ fprintf('超调量 (max)      : %.6f\n', max(y) - r_target);
 save(fullfile(script_dir, 'bp_pid_result.mat'), 'time', 'r', 'y', 'error', 'u', 'kp', 'ki', 'kd', 'N');
 
 %% ==================== 绘图 ====================
-fx = [1, min(2000, N)];    % 显示前 2000 步或全部
+fx = [0, min(2000, N) * 0.01];    % 显示前 20 秒或全部
 
 % --- 图1: 温度追踪 ---
 figure('Name', 'BP-PID 温度追踪', 'NumberTitle', 'off');
 plot(time, r, 'r', time, y, 'b--', 'LineWidth', 1.2);
 xlim(fx);
-xlabel('时间步');  ylabel('温度');
+xlabel('时间 (s)');  ylabel('温度');
 legend('目标 r', '实际 y', 'Location', 'best');
 title('BP-PID 阶跃响应 (r=1)');
 grid on;
@@ -183,7 +183,7 @@ grid on;
 figure('Name', 'BP-PID 控制量', 'NumberTitle', 'off');
 plot(time, u, 'r', 'LineWidth', 1);
 xlim(fx);
-xlabel('时间步');  ylabel('控制量 u');
+xlabel('时间 (s)');  ylabel('控制量 u');
 title('BP-PID 控制量');
 grid on;
 
@@ -192,16 +192,16 @@ figure('Name', 'BP-PID 参数变化', 'NumberTitle', 'off');
 subplot(311);
 plot(time, kp, 'r', 'LineWidth', 0.8);
 xlim(fx);
-xlabel('时间步');  ylabel('Kp');
+xlabel('时间 (s)');  ylabel('Kp');
 title('PID 参数在线自适应');
 grid on;
 subplot(312);
 plot(time, ki, 'g', 'LineWidth', 0.8);
 xlim(fx);
-xlabel('时间步');  ylabel('Ki');
+xlabel('时间 (s)');  ylabel('Ki');
 grid on;
 subplot(313);
 plot(time, kd, 'b', 'LineWidth', 0.8);
 xlim(fx);
-xlabel('时间步');  ylabel('Kd');
+xlabel('时间 (s)');  ylabel('Kd');
 grid on;

@@ -3,32 +3,45 @@ clear; close all;
 %% ==================== RBF 离线辨识预训练（多目标：预测 + Jacobian 匹配） ====================
 
 N_excite = 4000;
-epochs = 20;
+epochs = 30;  % 增多轮次覆盖多样化激励
 
 %% ==================== RBF 超参 ====================
-M       = 10;
+M_global = 10;
 n       = 4;         % [y(k-1), y(k-2), u(k-1), u(k-2)]
 gain    = [0.8; 0.8; 0.5; 0.5];
 eta_w   = 0.01;   eta_c  = 0.008;  eta_s  = 0.005;
 mu_w    = 0.05;   mu_c   = 0.02;   mu_s   = 0.02;
-sig_min = 0.5;    % 增大下限，避免过宽的基函数吞掉 u 敏感度
-lambda_jac = 0.50; % Jacobian 匹配权重（提高以改善闭环梯度精度）
+sig_min = 0.3;    % 减小下限，允许尖锐基函数提高局部 Jacobian 精度
+lambda_jac = 0.80; % Jacobian 匹配权重（诊断显示 Plant2 符号正确率仅 63%）
 
 for plant_idx = 1:3
     pid = sprintf('plant%d', plant_idx);
-    fprintf('\n===== RBF 离线训练: 对象%d =====\n', plant_idx);
+    % Plant2 扩容（诊断显示 min(H)=0，10 中心不足覆盖工作区）
+    if plant_idx == 2, M = 15; else, M = M_global; end
+    fprintf('\n===== RBF 离线训练: 对象%d (M=%d) =====\n', plant_idx, M);
 
-    %% ---- ① 激励信号 ----
+    %% ---- ① 激励信号（混合：阶跃 50% + 正弦 30% + 斜坡 20%） ----
     rng(plant_idx);
     u_ex = zeros(1, N_excite);
     y_ex = zeros(1, N_excite);
     y1 = 0; y2 = 0;
 
-    % Plant3 需要更大激励覆盖非线性区 (u_sat=3.0)
     if plant_idx == 3, u_amp = 4.0; else, u_amp = 3.0; end
+
+    % 分三段：Plant3 保留更多阶跃（非线性对象需覆盖方波极端工作点）
+    if plant_idx == 3
+        step_pct = 0.70;  sine_pct = 0.20;  ramp_pct = 0.10;
+    else
+        step_pct = 0.50;  sine_pct = 0.30;  ramp_pct = 0.20;
+    end
+    n_step = round(N_excite * step_pct);
+    n_sine = round(N_excite * sine_pct);
+    n_ramp = N_excite - n_step - n_sine;
+
+    % ---- 阶跃段 (0 → n_step) ----
     hold_steps = 0;
     u_val = 0;
-    for k = 1:N_excite
+    for k = 1:n_step
         if hold_steps <= 0
             u_val = (rand - 0.5) * u_amp;
             hold_steps = 20 + randi(40);
@@ -36,6 +49,36 @@ for plant_idx = 1:3
         u_ex(k) = u_val;
         hold_steps = hold_steps - 1;
         y_ex(k) = plant_dynamics(pid, y1, y2, u_ex(k), max(k>1)*u_ex(max(k-1,1)), k);
+        y2 = y1; y1 = y_ex(k);
+    end
+
+    % ---- 正弦段 (n_step → n_step+n_sine) ----
+    sine_freqs = [0.005, 0.01, 0.02, 0.03];
+    for k = n_step+1:n_step+n_sine
+        local_k = k - n_step;
+        if mod(local_k, 200) == 1
+            cur_freq = sine_freqs(randi(length(sine_freqs)));
+            cur_amp = 0.5 + rand * 1.0;
+        end
+        u_ex(k) = cur_amp * sin(2*pi*cur_freq*local_k);
+        y_ex(k) = plant_dynamics(pid, y1, y2, u_ex(k), u_ex(max(k-1,1)), k);
+        y2 = y1; y1 = y_ex(k);
+    end
+
+    % ---- 斜坡段 (n_step+n_sine → end) ----
+    u_val_start = u_ex(n_step+n_sine);
+    for k = n_step+n_sine+1:N_excite
+        local_k = k - n_step - n_sine;
+        if local_k == 1
+            u_target = (rand - 0.5) * u_amp;
+        end
+        if mod(local_k, 300) == 1
+            u_val_start = u_ex(k-1);
+            u_target = (rand - 0.5) * u_amp;
+        end
+        progress = min(1, mod(local_k, 300) / 300);
+        u_ex(k) = u_val_start + (u_target - u_val_start) * progress;
+        y_ex(k) = plant_dynamics(pid, y1, y2, u_ex(k), u_ex(max(k-1,1)), k);
         y2 = y1; y1 = y_ex(k);
     end
 
@@ -51,16 +94,27 @@ for plant_idx = 1:3
     J = max(-1, min(1, J));  % clamp 同在线 du_sys
     N_sample = size(X, 1);
 
-    %% ---- ③ 初始化 ----
+    %% ---- ③ 数据驱动初始化 ----
     rng(0);
-    W     = 0.2 * ones(1, M) + 0.05 * randn(1, M);
-    C     = 2 * (rand(M, n) - 0.5);
-    Sigma = 1.0 * ones(M, 1);   % 初始 σ=1（原 3.0 太宽）
+    % 从训练数据中采样中心（覆盖实际工作区域，解决 min(H)=0 问题）
+    idx_sample = randperm(N_sample, min(M, N_sample));
+    C = X(idx_sample, :);
+    % 添加小幅随机扰动避免中心完全重合
+    C = C + 0.1 * randn(M, n);
+    % Sigma 基于数据中心到最近邻距离
+    Sigma = zeros(M, 1);
+    for j = 1:M
+        dist_j = sqrt(sum((X - C(j,:)).^2, 2));
+        dist_j_sorted = sort(dist_j);
+        Sigma(j) = max(dist_j_sorted(min(5, length(dist_j_sorted))), 0.3);
+    end
+    W = 0.2 * ones(1, M) + 0.05 * randn(1, M);
     dW_prev = zeros(1, M);
     dC_prev = zeros(M, n);
     dSig_prev = zeros(M, 1);
 
     %% ---- ④ 多目标训练 ----
+    best_jac_mae = inf;  no_improve = 0;
     for ep = 1:epochs
         idx = randperm(N_sample);
         mae_ep = 0;
@@ -133,6 +187,19 @@ for plant_idx = 1:3
         end
         fprintf('  Epoch %d/%d  MAE_pred=%.5f  MAE_jac=%.4f\n', ...
             ep, epochs, mae_ep/N_sample, mae_jac_ep/N_sample);
+
+        % 早停：连续 3 轮 Jacobian MAE 不下降则停止
+        jac_mae_mean = mae_jac_ep / N_sample;
+        if jac_mae_mean < best_jac_mae
+            best_jac_mae = jac_mae_mean;
+            no_improve = 0;
+        else
+            no_improve = no_improve + 1;
+        end
+        if no_improve >= 3
+            fprintf('  早停：Jacobian MAE 连续 %d 轮未改善\n', no_improve);
+            break;
+        end
     end
 
     %% ---- ⑤ 保存 ----
