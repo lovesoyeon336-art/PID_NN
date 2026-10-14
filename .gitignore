@@ -21,3 +21,21 @@ precompile/
 # OS files
 Thumbs.db
 Desktop.ini
+
+# Simulink / MATLAB autosave
+*.autosave
+*.slx.r*~
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 编辑器与工具
+.idea/
+*.code-workspace
+
+# 运行输出（如需提交结果，请显式 git add -f）
+*.log
+output/
